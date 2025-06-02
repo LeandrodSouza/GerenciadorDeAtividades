@@ -107,6 +107,59 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message }) => {
     );
 };
 
+// Função utilitária para buscar clientes
+async function fetchClients() {
+    const res = await fetch(`${API_BASE_URL}/clients`);
+    const data = await res.json();
+    return data.data || [];
+}
+
+// Modal para cadastrar cliente
+function ClientModal({ isOpen, onClose, onClientAdded }) {
+    const [name, setName] = useState('');
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        if (!name.trim()) { setError('Nome é obrigatório'); return; }
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_URL}/clients`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                setError(data.error || 'Erro ao cadastrar cliente');
+                setLoading(false);
+                return;
+            }
+            setName('');
+            setLoading(false);
+            onClientAdded && onClientAdded();
+            onClose();
+        } catch (err) {
+            setError('Erro ao cadastrar cliente');
+            setLoading(false);
+        }
+    };
+    useEffect(() => { if (!isOpen) { setName(''); setError(''); setLoading(false); } }, [isOpen]);
+    if (!isOpen) return null;
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Cadastrar Cliente">
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Nome do Cliente" className="w-full p-2 border rounded" />
+                {error && <div className="text-red-500 text-sm">{error}</div>}
+                <div className="flex justify-end space-x-2">
+                    <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300" disabled={loading}>Cancelar</button>
+                    <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700" disabled={loading}>{loading ? 'Salvando...' : 'Salvar'}</button>
+                </div>
+            </form>
+        </Modal>
+    );
+}
+
 const TicketForm = ({ onTicketAdded, ticketToEdit, onTicketUpdated, onCancelEdit }) => {
     const ticketRepository = useTicketRepository();
     const [ticketIdInput, setTicketIdInput] = useState('');
@@ -116,6 +169,9 @@ const TicketForm = ({ onTicketAdded, ticketToEdit, onTicketUpdated, onCancelEdit
     const [difficulty, setDifficulty] = useState('Médio');
     const [creationDate, setCreationDate] = useState(new Date().toISOString().split('T')[0]);
     const [formMessage, setFormMessage] = useState({ text: '', type: '' });
+    const [clients, setClients] = useState([]);
+    const [clientSearch, setClientSearch] = useState('');
+    const [showClientModal, setShowClientModal] = useState(false);
 
     useEffect(() => {
         if (ticketToEdit) {
@@ -131,6 +187,19 @@ const TicketForm = ({ onTicketAdded, ticketToEdit, onTicketUpdated, onCancelEdit
             setCreationDate(new Date().toISOString().split('T')[0]);
         }
         setFormMessage({ text: '', type: '' });
+    }, [ticketToEdit]);
+
+    useEffect(() => {
+        fetchClients().then(setClients);
+    }, [showClientModal]);
+
+    useEffect(() => {
+        if (ticketToEdit && ticketToEdit.accountName) {
+            setClientSearch(ticketToEdit.accountName);
+            setAccountName(ticketToEdit.accountName);
+        } else {
+            setClientSearch('');
+        }
     }, [ticketToEdit]);
 
     const handleSubmit = async (e) => {
@@ -176,13 +245,38 @@ const TicketForm = ({ onTicketAdded, ticketToEdit, onTicketUpdated, onCancelEdit
         }
     };
     
+    const handleClientInput = (e) => {
+        setClientSearch(e.target.value);
+        setAccountName(e.target.value);
+    };
+
     return (
         <form onSubmit={handleSubmit} className="p-4 bg-slate-800 rounded-lg shadow mb-6 space-y-4">
             <h3 className="text-lg font-semibold text-gray-100 mb-3">{ticketToEdit ? 'Editar Ticket' : 'Adicionar Novo Ticket'}</h3>
             {formMessage.text && <p className={`text-sm mb-3 p-2 rounded ${formMessage.type === 'error' ? 'bg-red-500/30 text-red-300' : 'bg-green-500/30 text-green-300'}`}>{formMessage.text}</p>}
             <div><label htmlFor="ticketIdInput" className="block text-sm font-medium text-gray-300">ID do Ticket (Opcional)</label><input type="text" id="ticketIdInput" value={ticketIdInput} onChange={(e) => setTicketIdInput(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900" /></div>
             <div><label htmlFor="subject" className="block text-sm font-medium text-gray-300">Assunto *</label><input type="text" id="subject" value={subject} onChange={(e) => setSubject(e.target.value)} required className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900" /></div>
-            <div><label htmlFor="accountName" className="block text-sm font-medium text-gray-300">Nome da Conta</label><input type="text" id="accountName" value={accountName} onChange={(e) => setAccountName(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900" /></div>
+            <div>
+                <label htmlFor="accountName" className="block text-sm font-medium text-gray-300">Cliente</label>
+                <div className="flex gap-2">
+                    <input
+                        type="text"
+                        id="accountName"
+                        value={clientSearch}
+                        onChange={handleClientInput}
+                        placeholder="Buscar ou digitar cliente"
+                        className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900"
+                        list="client-list"
+                        autoComplete="off"
+                    />
+                    <button type="button" onClick={() => setShowClientModal(true)} className="px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-xs">Novo Cliente</button>
+                </div>
+                <datalist id="client-list">
+                    {clients.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase())).map(c => (
+                        <option key={c.id} value={c.name} />
+                    ))}
+                </datalist>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div><label htmlFor="priority" className="block text-sm font-medium text-gray-300">Prioridade</label><select id="priority" value={priority} onChange={(e) => setPriority(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900"><option value="Solicitado por Terceiros">Solicitado por Terceiros</option><option value="Alto Impacto">Alto Impacto</option><option value="Médio Impacto">Médio Impacto</option><option value="Baixo Impacto">Baixo Impacto</option></select></div>
                 <div><label htmlFor="difficulty" className="block text-sm font-medium text-gray-300">Dificuldade</label><select id="difficulty" value={difficulty} onChange={(e) => setDifficulty(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900"><option value="Fácil">Fácil</option><option value="Médio">Médio</option><option value="Difícil">Difícil</option></select></div>
@@ -192,6 +286,7 @@ const TicketForm = ({ onTicketAdded, ticketToEdit, onTicketUpdated, onCancelEdit
                  {ticketToEdit && (<button type="button" onClick={onCancelEdit} className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-300 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Cancelar Edição</button>)}
                 <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 flex items-center space-x-2"><Save size={18} /><span>{ticketToEdit ? 'Salvar Alterações' : 'Adicionar Ticket'}</span></button>
             </div>
+            <ClientModal isOpen={showClientModal} onClose={() => setShowClientModal(false)} onClientAdded={() => fetchClients().then(setClients)} />
         </form>
     );
 };
@@ -349,6 +444,13 @@ function App() {
     const [currentView, setCurrentView] = useState('tickets');
     const [editingTicket, setEditingTicket] = useState(null); 
     const [ticketFilter, setTicketFilter] = useState('abertos');
+    const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+    const [filterStartDate, setFilterStartDate] = useState('');
+    const [filterEndDate, setFilterEndDate] = useState('');
+    const [filterPriority, setFilterPriority] = useState('');
+    const [filterDifficulty, setFilterDifficulty] = useState('');
+    const [filterClient, setFilterClient] = useState('');
+    const [clients, setClients] = useState([]);
 
     const fetchTickets = useCallback(async () => {
         setIsLoading(true); setError(null);
@@ -362,6 +464,8 @@ function App() {
     }, [ticketRepository]);
 
     useEffect(() => { fetchTickets(); }, [fetchTickets]);
+
+    useEffect(() => { fetchClients().then(setClients); }, []);
 
     const addLogEntryToTicketObject = (ticketLog, action, reason = null, checklistState = null) => {
         const newLogEntry = { timestamp: new Date().toISOString(), action, ...(reason && { reason }), ...(checklistState && { checklist: checklistState }) };
@@ -411,10 +515,16 @@ function App() {
             const timeA = new Date(a.lastUpdatedAt || a.createdAt); const timeB = new Date(b.lastUpdatedAt || b.createdAt);
             return timeB - timeA;
         });
-        if (ticketFilter === 'abertos') return sortedTickets.filter(t => t.status !== 'Concluído');
-        if (ticketFilter === 'concluidos') return sortedTickets.filter(t => t.status === 'Concluído');
-        return sortedTickets;
-    }, [tickets, ticketFilter, activeTicketId]);
+        let filtered = sortedTickets;
+        if (ticketFilter === 'abertos') filtered = filtered.filter(t => t.status !== 'Concluído');
+        if (ticketFilter === 'concluidos') filtered = filtered.filter(t => t.status === 'Concluído');
+        if (filterStartDate) filtered = filtered.filter(t => t.creationTime && new Date(t.creationTime) >= new Date(filterStartDate));
+        if (filterEndDate) filtered = filtered.filter(t => t.creationTime && new Date(t.creationTime) <= new Date(filterEndDate + 'T23:59:59'));
+        if (filterPriority) filtered = filtered.filter(t => t.priority === filterPriority);
+        if (filterDifficulty) filtered = filtered.filter(t => t.difficulty === filterDifficulty);
+        if (filterClient) filtered = filtered.filter(t => t.accountName && t.accountName.toLowerCase().includes(filterClient.toLowerCase()));
+        return filtered;
+    }, [tickets, ticketFilter, activeTicketId, filterStartDate, filterEndDate, filterPriority, filterDifficulty, filterClient]);
 
     const activeTicketDetails = useMemo(() => { if (!activeTicketId) return null; return tickets.find(t => t.id === activeTicketId); }, [activeTicketId, tickets]);
     
@@ -447,9 +557,67 @@ function App() {
                     {error && (<div className="mb-4 p-3 bg-red-500/30 text-red-300 rounded-md text-center"><AlertTriangle size={20} className="inline mr-2"/> {error}</div>)}
                     {currentView === 'tickets' && (<>
                         <div className="mb-6 flex flex-col sm:flex-row justify-between items-center gap-4">
-                            <div className="flex items-center space-x-2 p-2 bg-slate-800 rounded-lg"><Filter size={20} className="text-indigo-400"/><select value={ticketFilter} onChange={(e) => setTicketFilter(e.target.value)} className="bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"><option value="abertos">Abertos</option><option value="concluidos">Concluídos</option><option value="todos">Todos</option></select></div>
+                            <div className="flex items-center space-x-2 p-2 bg-slate-800 rounded-lg">
+                                <Filter size={20} className="text-indigo-400"/>
+                                <select value={ticketFilter} onChange={(e) => setTicketFilter(e.target.value)} className="bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                    <option value="abertos">Abertos</option>
+                                    <option value="concluidos">Concluídos</option>
+                                    <option value="todos">Todos</option>
+                                </select>
+                                <button onClick={() => setShowAdvancedFilters(v => !v)} className="ml-2 px-2 py-1 text-xs rounded bg-indigo-600 hover:bg-indigo-700 text-white">{showAdvancedFilters ? 'Ocultar Filtros' : 'Filtros Avançados'}</button>
+                            </div>
                             <button onClick={() => { setEditingTicket(null); setShowTicketForm(prev => !prev);}} className="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-150 ease-in-out flex items-center space-x-2 w-full sm:w-auto justify-center"><PlusCircle size={20} /><span>{showTicketForm && !editingTicket ? 'Fechar Formulário' : (editingTicket ? 'Fechar Edição' : 'Adicionar Ticket')}</span></button>
                         </div>
+                        {showAdvancedFilters && (
+                            <div className="mb-4 flex flex-wrap gap-4 bg-slate-800 p-4 rounded-lg shadow">
+                                <div>
+                                    <label className="block text-xs text-gray-300 mb-1">Data Inicial</label>
+                                    <input type="date" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} className="bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-300 mb-1">Data Final</label>
+                                    <input type="date" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} className="bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-300 mb-1">Prioridade</label>
+                                    <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)} className="bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm">
+                                        <option value="">Todas</option>
+                                        <option value="Solicitado por Terceiros">Solicitado por Terceiros</option>
+                                        <option value="Alto Impacto">Alto Impacto</option>
+                                        <option value="Médio Impacto">Médio Impacto</option>
+                                        <option value="Baixo Impacto">Baixo Impacto</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-300 mb-1">Dificuldade</label>
+                                    <select value={filterDifficulty} onChange={e => setFilterDifficulty(e.target.value)} className="bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm">
+                                        <option value="">Todas</option>
+                                        <option value="Fácil">Fácil</option>
+                                        <option value="Médio">Médio</option>
+                                        <option value="Difícil">Difícil</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-300 mb-1">Cliente</label>
+                                    <input
+                                        type="text"
+                                        value={filterClient}
+                                        onChange={e => setFilterClient(e.target.value)}
+                                        placeholder="Buscar cliente"
+                                        className="bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm"
+                                        list="filter-client-list"
+                                    />
+                                    <datalist id="filter-client-list">
+                                        {clients.filter(c => c.name.toLowerCase().includes(filterClient.toLowerCase())).map(c => (
+                                            <option key={c.id} value={c.name} />
+                                        ))}
+                                    </datalist>
+                                </div>
+                                <div className="flex items-end">
+                                    <button onClick={() => { setFilterStartDate(''); setFilterEndDate(''); setFilterPriority(''); setFilterDifficulty(''); setFilterClient(''); }} className="ml-2 px-3 py-2 text-xs rounded bg-slate-600 hover:bg-slate-700 text-white">Limpar Filtros</button>
+                                </div>
+                            </div>
+                        )}
                         {(showTicketForm || editingTicket) && (<TicketForm onTicketAdded={handleTicketAddedOrUpdated} ticketToEdit={editingTicket} onTicketUpdated={handleTicketAddedOrUpdated} onCancelEdit={handleTicketFormClose}/>)}
                         {isLoading && <div className="text-center py-10 text-gray-300">Carregando tickets...</div>}
                         {!isLoading && !error && filteredTickets.length === 0 && !showTicketForm && (<div className="text-center py-10 bg-slate-800 rounded-lg shadow-md"><p className="text-xl text-gray-400">Nenhum ticket encontrado para o filtro atual.</p>{ticketFilter === 'abertos' && <p className="text-gray-500">Adicione um novo ticket para começar ou altere o filtro.</p>}</div>)}

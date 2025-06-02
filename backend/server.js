@@ -206,6 +206,46 @@ app.delete("/api/tickets/:id", (req, res) => {
     });
 });
 
+// CRUD de clientes (clients)
+// GET /api/clients - Listar todos os clientes
+app.get('/api/clients', (req, res) => {
+    db.all('SELECT * FROM clients ORDER BY name ASC', [], (err, rows) => {
+        if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+        res.json({ message: 'success', data: rows });
+    });
+});
+
+// POST /api/clients - Criar novo cliente
+app.post('/api/clients', (req, res) => {
+    const { name } = req.body;
+    if (!name || !name.trim()) {
+        res.status(400).json({ error: "O campo 'name' é obrigatório" });
+        return;
+    }
+    const id = require('uuid').v4();
+    db.run('INSERT INTO clients (id, name) VALUES (?, ?)', [id, name.trim()], function (err) {
+        if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+        res.status(201).json({ message: 'success', data: { id, name: name.trim() } });
+    });
+});
+
+// DELETE /api/clients/:id - Remover cliente
+app.delete('/api/clients/:id', (req, res) => {
+    db.run('DELETE FROM clients WHERE id = ?', [req.params.id], function (err) {
+        if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+        res.json({ message: 'success', deleted: this.changes });
+    });
+});
+
 app.listen(PORT, () => {
     console.log(`Servidor backend rodando na porta ${PORT}`);
     console.log(`Acesse a API em http://localhost:${PORT}/api/tickets`);

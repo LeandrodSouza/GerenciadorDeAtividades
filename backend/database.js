@@ -43,6 +43,16 @@ const db = new sqlite3.Database(DBSOURCE, (err) => {
                 console.log('Tabela "tickets" pronta ou já existente.');
             }
         });
+        db.run(`CREATE TABLE IF NOT EXISTS clients (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE
+        )`, (err) => {
+            if (err) {
+                console.log('Erro ao criar tabela clients:', err.message);
+            } else {
+                console.log('Tabela "clients" pronta ou já existente.');
+            }
+        });
     }
 });
 
