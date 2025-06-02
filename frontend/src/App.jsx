@@ -495,18 +495,61 @@ const ReportsView = ({ tickets }) => {
 
     const generateReport = () => {
         setIsLoadingReport(true); setReportData(null);
-        const date = new Date(selectedDate + "T00:00:00Z");
+        // selectedDate is "YYYY-MM-DD" string from input, representing local date.
+
         if (reportType === 'daily') {
             const dailySummary = tickets.map(ticket => {
                 let actionsOnDay = [];
-                (ticket.log || []).forEach(logEntry => { if (new Date(logEntry.timestamp).toDateString() === date.toDateString()) { actionsOnDay.push(`${formatDateTimeFromISO(logEntry.timestamp)}: ${logEntry.action} ${logEntry.reason ? '('+logEntry.reason+')':''}`); }});
-                return { id: ticket.id, subject: ticket.subject, timeSpentDisplay: actionsOnDay.length > 0 ? formatTime(ticket.elapsedTime) : formatTime(0), actions: actionsOnDay, };
+                (ticket.log || []).forEach(logEntry => {
+                    const logEntryDate = new Date(logEntry.timestamp); // UTC timestamp from log
+                    // Format logEntryDate to "YYYY-MM-DD" in local time for comparison
+                    const logYear = logEntryDate.getFullYear();
+                    const logMonth = (logEntryDate.getMonth() + 1).toString().padStart(2, '0');
+                    const logDay = logEntryDate.getDate().toString().padStart(2, '0');
+                    const localLogDateString = `${logYear}-${logMonth}-${logDay}`;
+
+                    if (localLogDateString === selectedDate) {
+                        actionsOnDay.push(`${formatDateTimeFromISO(logEntry.timestamp)}: ${logEntry.action} ${logEntry.reason ? '('+logEntry.reason+')':''}`);
+                    }
+                });
+                return { 
+                    id: ticket.id, 
+                    subject: ticket.subject, 
+                    timeSpentDisplay: actionsOnDay.length > 0 ? formatTime(ticket.elapsedTime) : formatTime(0), // Note: This is total ticket time, not time on day.
+                    actions: actionsOnDay, 
+                };
             }).filter(t => t.actions.length > 0);
-            setReportData({ type: 'daily', date: formatDateFromISO(date.toISOString()), summary: dailySummary });
+            
+            // Create a Date object from selectedDate at midday local time for display formatting.
+            const displayDate = new Date(selectedDate + "T12:00:00"); 
+            setReportData({ type: 'daily', date: formatDateFromISO(displayDate.toISOString()), summary: dailySummary });
+
         } else if (reportType === 'weekly') {
-            const weekStart = new Date(date); weekStart.setUTCDate(date.getUTCDate() - date.getUTCDay());
-            const weekEnd = new Date(weekStart); weekEnd.setUTCDate(weekStart.getUTCDate() + 6); weekEnd.setUTCHours(23,59,59,999);
-            const weeklySummary = tickets.filter(t => { const ticketDate = new Date(t.lastUpdatedAt || t.createdAt); return ticketDate >= weekStart && ticketDate <= weekEnd; }).map(ticket => ({ id: ticket.id, subject: ticket.subject, totalTime: formatTime(ticket.elapsedTime), status: ticket.status, }));
+            // Treat selectedDate as the target local date to determine the week.
+            const targetLocalDate = new Date(selectedDate + "T12:00:00"); 
+            
+            const dayOfWeek = targetLocalDate.getDay(); // Sunday = 0, Monday = 1, etc. (local)
+            const diffToSunday = targetLocalDate.getDate() - dayOfWeek;
+            
+            const weekStart = new Date(targetLocalDate);
+            weekStart.setDate(diffToSunday);
+            weekStart.setHours(0, 0, 0, 0); // Start of Sunday, local time
+
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekStart.getDate() + 6);
+            weekEnd.setHours(23, 59, 59, 999); // End of Saturday, local time
+
+            const weeklySummary = tickets.filter(t => { 
+                const ticketDate = new Date(t.lastUpdatedAt || t.createdAt); // Assuming these are UTC
+                // Compare ticketDate (UTC) against the local time range [weekStart, weekEnd]
+                // This comparison is okay as Date objects will handle the underlying epoch values.
+                return ticketDate >= weekStart && ticketDate <= weekEnd; 
+            }).map(ticket => ({ 
+                id: ticket.id, 
+                subject: ticket.subject, 
+                totalTime: formatTime(ticket.elapsedTime), 
+                status: ticket.status, 
+            }));
             setReportData({ type: 'weekly', startDate: formatDateFromISO(weekStart.toISOString()), endDate: formatDateFromISO(weekEnd.toISOString()), summary: weeklySummary });
         }
         setIsLoadingReport(false);
@@ -643,7 +686,9 @@ function App() {
 
         if (filterPriority) filtered = filtered.filter(t => t.priority === filterPriority);
         if (filterDifficulty) filtered = filtered.filter(t => t.difficulty === filterDifficulty);
-        if (filterClient) filtered = filtered.filter(t => t.accountName === filterClient); // Exact match for dropdown
+        if (filterClient) { // Reverted to partial, case-insensitive match
+            filtered = filtered.filter(t => t.accountName && t.accountName.toLowerCase().includes(filterClient.toLowerCase()));
+        }
         return filtered;
     }, [tickets, ticketFilter, activeTicketId, filterStartDate, filterEndDate, filterPriority, filterDifficulty, filterClient]);
 
@@ -740,22 +785,30 @@ function App() {
                                         </select>
                                     </div>
                                     <div>
-                                        <label htmlFor="filterClientSelect" className="block text-xs font-medium text-gray-300 mb-1">Cliente</label>
-                                        <select
-                                            id="filterClientSelect"
+                                        <label htmlFor="filterClientInput" className="block text-xs font-medium text-gray-300 mb-1">Cliente</label>
+                                        <input
+                                            type="text"
+                                            id="filterClientInput"
                                             value={filterClient}
                                             onChange={e => setFilterClient(e.target.value)}
+                                            placeholder="Digite para buscar cliente..."
                                             className="w-full bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm"
-                                        >
-                                            <option value="">-- Todos os Clientes --</option>
-                                            {clients.map(client => (
-                                                <option key={client.id} value={client.name}>
-                                                    {client.name}
-                                                </option>
-                                            ))}
-                                        </select>
+                                            list="advanced-client-filter-list"
+                                            autoComplete="off"
+                                        />
+                                        <datalist id="advanced-client-filter-list">
+                                            {clients
+                                                .filter(client => 
+                                                    filterClient.trim() === '' || 
+                                                    client.name.toLowerCase().includes(filterClient.toLowerCase())
+                                                )
+                                                .map(client => (
+                                                    <option key={client.id} value={client.name} />
+                                                ))
+                                            }
+                                        </datalist>
                                     </div>
-                                    <div className="self-end"> {/* Aligns button with the bottom of other taller inputs */}
+                                    <div className="self-end">
                                         <button 
                                             onClick={() => { setFilterStartDate(''); setFilterEndDate(''); setFilterPriority(''); setFilterDifficulty(''); setFilterClient(''); }} 
                                             className="w-full px-3 py-2 text-sm rounded bg-slate-600 hover:bg-slate-500 text-white" // Adjusted padding and text size
