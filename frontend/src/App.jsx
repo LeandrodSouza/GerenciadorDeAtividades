@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
-import { Clock, Play, Pause, PlusCircle, CalendarDays, Trash2, Edit3, ListChecks, AlertTriangle, CheckCircle, XCircle, ChevronDown, ChevronUp, Save, Filter, FileText, BarChart3, RefreshCw } from 'lucide-react';
+import { Clock, Play, Pause, PlusCircle, UserPlus, CalendarDays, Trash2, Edit3, ListChecks, AlertTriangle, CheckCircle, XCircle, ChevronDown, ChevronUp, Save, Filter, FileText, BarChart3, RefreshCw } from 'lucide-react';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
@@ -148,70 +148,95 @@ function ClientModal({ isOpen, onClose, onClientAdded }) {
     if (!isOpen) return null;
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Cadastrar Cliente">
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Nome do Cliente" className="w-full p-2 border rounded" />
-                {error && <div className="text-red-500 text-sm">{error}</div>}
-                <div className="flex justify-end space-x-2">
-                    <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300" disabled={loading}>Cancelar</button>
-                    <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700" disabled={loading}>{loading ? 'Salvando...' : 'Salvar'}</button>
+            <form onSubmit={handleSubmit} className="space-y-6"> {/* Increased space-y for better separation */}
+                <div>
+                    <label htmlFor="clientName" className="block text-sm font-medium text-gray-700 mb-1">Nome do Cliente *</label>
+                    <input 
+                        type="text" 
+                        id="clientName"
+                        value={name} 
+                        onChange={e => setName(e.target.value.toUpperCase())} 
+                        placeholder="Nome do Cliente" 
+                        className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900" 
+                    />
+                </div>
+                {error && <div className="text-red-600 text-sm p-2 bg-red-100 rounded-md">{error}</div>} {/* Enhanced error display */}
+                <div className="flex justify-end space-x-3 pt-2"> {/* Added pt-2 and increased space-x */}
+                    <button 
+                        type="button" 
+                        onClick={onClose} 
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md border border-gray-300 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" 
+                        disabled={loading}
+                    >
+                        Cancelar
+                    </button>
+                    <button 
+                        type="submit" 
+                        className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 flex items-center" 
+                        disabled={loading}
+                    >
+                        {loading ? (
+                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        ) : <Save size={18} className="mr-2"/>}
+                        {loading ? 'Salvando...' : 'Salvar'}
+                    </button>
                 </div>
             </form>
         </Modal>
     );
 }
 
-const TicketForm = ({ onTicketAdded, ticketToEdit, onTicketUpdated, onCancelEdit }) => {
+const TicketForm = ({ onTicketAdded, ticketToEdit, onTicketUpdated, onCancelEdit, clients, onOpenClientModal }) => { // Added clients and onOpenClientModal props
     const ticketRepository = useTicketRepository();
     const [ticketIdInput, setTicketIdInput] = useState('');
     const [subject, setSubject] = useState('');
-    const [accountName, setAccountName] = useState('');
+    const [selectedClientId, setSelectedClientId] = useState('');
     const [priority, setPriority] = useState('Médio Impacto');
     const [difficulty, setDifficulty] = useState('Médio');
     const [creationDate, setCreationDate] = useState(new Date().toISOString().split('T')[0]);
     const [formMessage, setFormMessage] = useState({ text: '', type: '' });
-    const [clients, setClients] = useState([]);
-    const [clientSearch, setClientSearch] = useState('');
-    const [showClientModal, setShowClientModal] = useState(false);
+    // Removed local clients state and showClientModal state
 
     useEffect(() => {
         if (ticketToEdit) {
             setTicketIdInput(ticketToEdit.ticketIdInput || '');
             setSubject(ticketToEdit.subject || '');
-            setAccountName(ticketToEdit.accountName || '');
+            setSelectedClientId(ticketToEdit.clientId || '');
             setPriority(ticketToEdit.priority || 'Médio Impacto');
             setDifficulty(ticketToEdit.difficulty || 'Médio');
             setCreationDate(ticketToEdit.creationTime ? new Date(ticketToEdit.creationTime).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
         } else {
-            setTicketIdInput(''); setSubject(''); setAccountName('');
+            setTicketIdInput(''); setSubject(''); setSelectedClientId('');
             setPriority('Médio Impacto'); setDifficulty('Médio');
             setCreationDate(new Date().toISOString().split('T')[0]);
         }
         setFormMessage({ text: '', type: '' });
     }, [ticketToEdit]);
 
-    useEffect(() => {
-        fetchClients().then(setClients);
-    }, [showClientModal]);
-
-    useEffect(() => {
-        if (ticketToEdit && ticketToEdit.accountName) {
-            setClientSearch(ticketToEdit.accountName);
-            setAccountName(ticketToEdit.accountName);
-        } else {
-            setClientSearch('');
-        }
-    }, [ticketToEdit]);
+    // Removed useEffect that fetched clients locally based on showClientModal
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setFormMessage({ text: '', type: '' }); 
+
+        if (!selectedClientId) { // Validate clientId
+            setFormMessage({ text: "Seleção de cliente é obrigatória.", type: "error" });
+            return;
+        }
         if (!subject.trim()) {
             setFormMessage({ text: "Assunto do ticket é obrigatório.", type: "error" });
             return;
         }
+
         const ticketDataObject = {
             ticketIdInput: ticketIdInput.trim() || `T-${Date.now().toString().slice(-6)}`,
-            subject: subject.trim(), accountName: accountName.trim(), priority, difficulty,
+            subject: subject.trim(), 
+            clientId: selectedClientId, // Use selectedClientId
+            // accountName: accountName.trim(), // REMOVED
+            priority, difficulty,
             creationTime: new Date(creationDate + "T00:00:00.000Z").toISOString(), 
             status: ticketToEdit ? ticketToEdit.status : 'Pendente',
             elapsedTime: ticketToEdit ? ticketToEdit.elapsedTime || 0 : 0,
@@ -234,8 +259,9 @@ const TicketForm = ({ onTicketAdded, ticketToEdit, onTicketUpdated, onCancelEdit
                 if (onTicketAdded) onTicketAdded();
                 setFormMessage({ text: "Ticket adicionado com sucesso!", type: "success" });
             }
-             if (!ticketToEdit || (ticketToEdit && onTicketAdded)) {
-                 setTicketIdInput(''); setSubject(''); setAccountName('');
+             if (!ticketToEdit || (ticketToEdit && onTicketAdded)) { // Reset form for new ticket or if specifically requested after update
+                 setTicketIdInput(''); setSubject(''); setSelectedClientId(''); // Reset clientId
+                 // setAccountName(''); // Removed
                  setPriority('Médio Impacto'); setDifficulty('Médio');
                  setCreationDate(new Date().toISOString().split('T')[0]);
             }
@@ -245,48 +271,57 @@ const TicketForm = ({ onTicketAdded, ticketToEdit, onTicketUpdated, onCancelEdit
         }
     };
     
-    const handleClientInput = (e) => {
-        setClientSearch(e.target.value);
-        setAccountName(e.target.value);
-    };
+    // const handleClientInput = (e) => { // Removed
+    //     setClientSearch(e.target.value);
+    //     setAccountName(e.target.value);
+    // };
 
     return (
-        <form onSubmit={handleSubmit} className="p-4 bg-slate-800 rounded-lg shadow mb-6 space-y-4">
-            <h3 className="text-lg font-semibold text-gray-100 mb-3">{ticketToEdit ? 'Editar Ticket' : 'Adicionar Novo Ticket'}</h3>
-            {formMessage.text && <p className={`text-sm mb-3 p-2 rounded ${formMessage.type === 'error' ? 'bg-red-500/30 text-red-300' : 'bg-green-500/30 text-green-300'}`}>{formMessage.text}</p>}
-            <div><label htmlFor="ticketIdInput" className="block text-sm font-medium text-gray-300">ID do Ticket (Opcional)</label><input type="text" id="ticketIdInput" value={ticketIdInput} onChange={(e) => setTicketIdInput(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900" /></div>
-            <div><label htmlFor="subject" className="block text-sm font-medium text-gray-300">Assunto *</label><input type="text" id="subject" value={subject} onChange={(e) => setSubject(e.target.value)} required className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900" /></div>
+            <form onSubmit={handleSubmit} className="p-6 bg-slate-800 rounded-lg shadow-xl mb-8 space-y-6"> {/* Increased padding and bottom margin, space-y-6 */}
+            <h3 className="text-xl font-semibold text-gray-100 mb-4">{ticketToEdit ? 'Editar Ticket' : 'Adicionar Novo Ticket'}</h3> {/* Increased font size and bottom margin */}
+            {formMessage.text && <p className={`text-sm mb-4 p-3 rounded-md ${formMessage.type === 'error' ? 'bg-red-500/30 text-red-200 border border-red-400/50' : 'bg-green-500/30 text-green-200 border border-green-400/50'}`}>{formMessage.text}</p>} {/* Enhanced message styling */}
+            
             <div>
-                <label htmlFor="accountName" className="block text-sm font-medium text-gray-300">Cliente</label>
-                <div className="flex gap-2">
-                    <input
-                        type="text"
-                        id="accountName"
-                        value={clientSearch}
-                        onChange={handleClientInput}
-                        placeholder="Buscar ou digitar cliente"
-                        className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900"
-                        list="client-list"
-                        autoComplete="off"
-                    />
-                    <button type="button" onClick={() => setShowClientModal(true)} className="px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-xs">Novo Cliente</button>
+                <label htmlFor="clientSelect" className="block text-sm font-medium text-gray-300 mb-1">Cliente *</label> {/* Added mb-1 */}
+                <div className="flex items-center gap-2 mt-1"> {/* Ensure items-center for vertical alignment */}
+                    <select
+                        id="clientSelect"
+                        value={selectedClientId}
+                        onChange={e => setSelectedClientId(e.target.value)}
+                        required
+                        className="block w-full px-3 py-2.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900" /* Adjusted py for height consistency */
+                    >
+                        <option value="" disabled>-- Selecione um Cliente --</option>
+                        {clients.map(client => (
+                            <option key={client.id} value={client.id}>
+                                {client.name}
+                            </option>
+                        ))}
+                    </select>
+                    <button 
+                        type="button" 
+                        onClick={onOpenClientModal} // Use prop to open global modal
+                        className="px-3 py-2.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm flex items-center justify-center shadow-sm"
+                        title="Cadastrar Novo Cliente"
+                    >
+                        <PlusCircle size={20} />
+                    </button>
                 </div>
-                <datalist id="client-list">
-                    {clients.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase())).map(c => (
-                        <option key={c.id} value={c.name} />
-                    ))}
-                </datalist>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div><label htmlFor="priority" className="block text-sm font-medium text-gray-300">Prioridade</label><select id="priority" value={priority} onChange={(e) => setPriority(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900"><option value="Solicitado por Terceiros">Solicitado por Terceiros</option><option value="Alto Impacto">Alto Impacto</option><option value="Médio Impacto">Médio Impacto</option><option value="Baixo Impacto">Baixo Impacto</option></select></div>
-                <div><label htmlFor="difficulty" className="block text-sm font-medium text-gray-300">Dificuldade</label><select id="difficulty" value={difficulty} onChange={(e) => setDifficulty(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900"><option value="Fácil">Fácil</option><option value="Médio">Médio</option><option value="Difícil">Difícil</option></select></div>
+
+            <div><label htmlFor="ticketIdInput" className="block text-sm font-medium text-gray-300 mb-1">ID do Ticket (Opcional)</label><input type="text" id="ticketIdInput" value={ticketIdInput} onChange={(e) => setTicketIdInput(e.target.value)} disabled={!selectedClientId} className="mt-1 block w-full px-3 py-2.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900 disabled:bg-gray-200 disabled:text-gray-500" /></div>
+            <div><label htmlFor="subject" className="block text-sm font-medium text-gray-300 mb-1">Assunto *</label><input type="text" id="subject" value={subject} onChange={(e) => setSubject(e.target.value)} required disabled={!selectedClientId} className="mt-1 block w-full px-3 py-2.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900 disabled:bg-gray-200 disabled:text-gray-500" /></div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6">
+                <div><label htmlFor="priority" className="block text-sm font-medium text-gray-300 mb-1">Prioridade</label><select id="priority" value={priority} onChange={(e) => setPriority(e.target.value)} disabled={!selectedClientId} className="mt-1 block w-full px-3 py-2.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900 disabled:bg-gray-200 disabled:text-gray-500"><option value="Solicitado por Terceiros">Solicitado por Terceiros</option><option value="Alto Impacto">Alto Impacto</option><option value="Médio Impacto">Médio Impacto</option><option value="Baixo Impacto">Baixo Impacto</option></select></div>
+                <div><label htmlFor="difficulty" className="block text-sm font-medium text-gray-300 mb-1">Dificuldade</label><select id="difficulty" value={difficulty} onChange={(e) => setDifficulty(e.target.value)} disabled={!selectedClientId} className="mt-1 block w-full px-3 py-2.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900 disabled:bg-gray-200 disabled:text-gray-500"><option value="Fácil">Fácil</option><option value="Médio">Médio</option><option value="Difícil">Difícil</option></select></div>
             </div>
-            <div><label htmlFor="creationDate" className="block text-sm font-medium text-gray-300">Data de Criação</label><input type="date" id="creationDate" value={creationDate} onChange={(e) => setCreationDate(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900" /></div>
-            <div className="flex justify-end space-x-2">
-                 {ticketToEdit && (<button type="button" onClick={onCancelEdit} className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-300 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Cancelar Edição</button>)}
-                <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 flex items-center space-x-2"><Save size={18} /><span>{ticketToEdit ? 'Salvar Alterações' : 'Adicionar Ticket'}</span></button>
+            <div><label htmlFor="creationDate" className="block text-sm font-medium text-gray-300 mb-1">Data de Criação</label><input type="date" id="creationDate" value={creationDate} onChange={(e) => setCreationDate(e.target.value)} disabled={!selectedClientId} className="mt-1 block w-full px-3 py-2.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900 disabled:bg-gray-200 disabled:text-gray-500" /></div>
+            <div className="flex justify-end space-x-3 pt-4">
+                 {ticketToEdit && (<button type="button" onClick={onCancelEdit} className="px-4 py-2 text-sm font-medium text-gray-300 bg-slate-700 rounded-md border border-slate-600 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:ring-offset-slate-800">Cancelar Edição</button>)}
+                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:ring-offset-slate-800 flex items-center space-x-2"><Save size={18} /><span>{ticketToEdit ? 'Salvar Alterações' : 'Adicionar Ticket'}</span></button>
             </div>
-            <ClientModal isOpen={showClientModal} onClose={() => setShowClientModal(false)} onClientAdded={() => fetchClients().then(setClients)} />
+            {/* ClientModal instance removed from here */}
         </form>
     );
 };
@@ -363,30 +398,41 @@ const TicketItem = ({ ticket, onToggleTimer, onDeleteTicket, onEditTicket, activ
     const styles = getStatusStyles();
 
     return (
-        <div className={`p-4 rounded-lg shadow-md border-l-4 ${styles.bg} ${styles.border} mb-4 transition-all duration-300`}>
+        <div className={`p-5 rounded-lg shadow-lg border-l-4 ${styles.bg} ${styles.border} mb-4 transition-all duration-300`}> {/* Increased p-5, shadow-lg */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-                <div className={`flex-grow mb-3 sm:mb-0 ${styles.itemText}`}>
-                    <div className="flex items-center justify-between"><h4 className={`text-lg font-semibold ${styles.itemText}`}>{ticket.subject}</h4><button onClick={() => setExpanded(!expanded)} className={`p-1 ${styles.text} hover:text-indigo-400`}>{expanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}</button></div>
-                    <p className="text-sm ">ID: {ticket.ticketIdInput} | Conta: {ticket.accountName || 'N/A'}</p>
-                    <p className="text-sm ">Prioridade: <span className={getPriorityClass(ticket.priority)}>{ticket.priority}</span> | Dificuldade: {ticket.difficulty}</p>
-                    <p className="text-sm ">Criado em: {formatDateFromISO(ticket.creationTime)}</p>
-                    <p className={`text-sm font-medium ${styles.text}`}>Status: {ticket.status}</p>
+                <div className={`flex-grow mb-4 sm:mb-0 ${styles.itemText} space-y-1`}> {/* Added space-y-1 for consistent spacing */}
+                    <div className="flex items-center justify-between">
+                        <h4 className={`text-xl font-semibold ${styles.itemText}`}>{ticket.subject}</h4> {/* Increased subject font size */}
+                        <button onClick={() => setExpanded(!expanded)} className={`p-1.5 ${styles.text} hover:text-indigo-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400`}>{expanded ? <ChevronUp size={22} /> : <ChevronDown size={22} />}</button> {/* Increased icon size and padding, added focus ring */}
+                    </div>
+                    <p className="text-sm text-gray-400">ID: {ticket.ticketIdInput} <span className="text-gray-500 mx-1">|</span> Cliente: {ticket.accountName || 'N/A'}</p> {/* Improved separator and color consistency */}
+                    <p className="text-sm text-gray-400">Prioridade: <span className={getPriorityClass(ticket.priority)}>{ticket.priority}</span> <span className="text-gray-500 mx-1">|</span> Dificuldade: {ticket.difficulty}</p>
+                    <p className="text-sm text-gray-400">Criado em: {formatDateFromISO(ticket.creationTime)}</p>
+                    <p className={`text-md font-semibold ${styles.text}`}>Status: {ticket.status}</p> {/* Increased status font size and weight */}
                 </div>
-                <div className="flex flex-col items-end space-y-2 w-full sm:w-auto">
-                    <div className="text-2xl font-mono text-indigo-400 tracking-wider"><Clock size={22} className="inline mr-2" />{formatTime(currentElapsedTime)}</div>
-                    <div className="flex space-x-2">
-                        {ticket.status !== 'Concluído' && (<button onClick={handleToggle} className={`p-2 rounded-md text-white transition-colors duration-150 flex items-center space-x-1 text-sm ${isActive && ticket.status === 'Em Progresso' ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}>{isActive && ticket.status === 'Em Progresso' ? <Pause size={16} /> : <Play size={16} />}<span>{isActive && ticket.status === 'Em Progresso' ? 'Pausar/Parar' : (ticket.status === 'Pausado' ? 'Retomar' : 'Iniciar')}</span></button>)}
-                        <button onClick={() => onEditTicket(ticket)} title="Editar Ticket" className="p-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors duration-150"><Edit3 size={16} /></button>
-                        <button onClick={() => setIsConfirmDeleteOpen(true)} title="Excluir Ticket" className="p-2 bg-slate-600 text-white rounded-md hover:bg-slate-500 transition-colors duration-150"><Trash2 size={16} /></button>
+                <div className="flex flex-col items-stretch sm:items-end space-y-3 w-full sm:w-auto"> {/* Increased space-y, items-stretch for full width buttons on mobile */}
+                    <div className="text-2xl font-mono text-indigo-300 tracking-wider flex items-center justify-end sm:justify-start"><Clock size={22} className="inline mr-2 text-indigo-400" />{formatTime(currentElapsedTime)}</div>
+                    <div className="flex space-x-2 justify-end sm:justify-start w-full"> {/* Ensure buttons take available space or justify end */}
+                        {ticket.status !== 'Concluído' && (
+                            <button onClick={handleToggle} className={`py-2 px-3 rounded-md text-white transition-colors duration-150 flex items-center space-x-1.5 text-sm shadow-sm hover:shadow-md ${isActive && ticket.status === 'Em Progresso' ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}> {/* Adjusted padding, added shadow */}
+                                {isActive && ticket.status === 'Em Progresso' ? <Pause size={16} /> : <Play size={16} />}
+                                <span>{isActive && ticket.status === 'Em Progresso' ? 'Pausar/Parar' : (ticket.status === 'Pausado' ? 'Retomar' : 'Iniciar')}</span>
+                            </button>
+                        )}
+                        <button onClick={() => onEditTicket(ticket)} title="Editar Ticket" className="py-2 px-3 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors duration-150 shadow-sm hover:shadow-md"><Edit3 size={16} /></button>
+                        <button onClick={() => setIsConfirmDeleteOpen(true)} title="Excluir Ticket" className="py-2 px-3 bg-slate-600 text-white rounded-md hover:bg-slate-500 transition-colors duration-150 shadow-sm hover:shadow-md"><Trash2 size={16} /></button>
                     </div>
                 </div>
             </div>
             {expanded && (
-                <div className={`mt-4 pt-3 border-t ${styles.border} border-opacity-50 ${styles.itemText}`}>
-                    <h5 className="text-sm font-semibold mb-2">Log de Atividades:</h5>
-                    {ticket.log && ticket.log.length > 0 ? (<ul className="space-y-1 text-xs max-h-32 overflow-y-auto bg-slate-700/50 p-2 rounded">{ticket.log.slice().reverse().map((entry, index) => (<li key={index} className="p-1 rounded-sm"><strong className="text-indigo-400">{formatDateTimeFromISO(entry.timestamp)}:</strong> {entry.action}{entry.reason && ` (Motivo: ${entry.reason})`}{entry.checklist && (<span className="text-gray-400 text-xs">(Ticket: {entry.checklist.respondeuTicket ? 'Sim' : 'Não'}, Planilha: {entry.checklist.respondeuPlanilha ? 'Sim' : 'Não'})</span>)}</li>))}</ul>) : (<p className="text-xs">Nenhuma atividade registrada.</p>)}
-                    <h5 className="text-sm font-semibold mt-3 mb-1">Checklist Atual:</h5>
-                    <ul className="text-xs space-y-1"><li className="flex items-center">{ticket.checklist?.respondeuTicket ? <CheckCircle size={14} className="text-green-400 mr-1"/> : <XCircle size={14} className="text-red-400 mr-1"/>}Respondeu Ticket Principal</li><li className="flex items-center">{ticket.checklist?.respondeuPlanilha ? <CheckCircle size={14} className="text-green-400 mr-1"/> : <XCircle size={14} className="text-red-400 mr-1"/>}Atualizou Planilha</li></ul>
+                <div className={`mt-4 pt-4 border-t ${styles.border} border-opacity-60 ${styles.itemText}`}> {/* Increased pt, border-opacity */}
+                    <h5 className="text-md font-semibold mb-2 text-gray-200">Log de Atividades:</h5> {/* Increased font size, adjusted color */}
+                    {ticket.log && ticket.log.length > 0 ? (<ul className="space-y-1.5 text-sm max-h-40 overflow-y-auto bg-slate-700/60 p-3 rounded-md shadow-inner">{ticket.log.slice().reverse().map((entry, index) => (<li key={index} className="p-1.5 rounded-sm text-gray-300 hover:bg-slate-600/50"><strong className="text-indigo-400 font-medium">{formatDateTimeFromISO(entry.timestamp)}:</strong> {entry.action}{entry.reason && <span className="text-gray-400 italic"> (Motivo: {entry.reason})</span>}{entry.checklist && (<span className="text-gray-400 text-xs block mt-0.5">(Ticket: {entry.checklist.respondeuTicket ? 'Sim' : 'Não'}, Planilha: {entry.checklist.respondeuPlanilha ? 'Sim' : 'Não'})</span>)}</li>))}</ul>) : (<p className="text-sm text-gray-400">Nenhuma atividade registrada.</p>)} {/* Increased text size, padding, max-h */}
+                    <h5 className="text-md font-semibold mt-4 mb-2 text-gray-200">Checklist Atual:</h5> {/* Increased mt, font size */}
+                    <ul className="text-sm space-y-1.5 text-gray-300"> {/* Increased text size, space-y */}
+                        <li className="flex items-center p-1">{ticket.checklist?.respondeuTicket ? <CheckCircle size={16} className="text-green-400 mr-2"/> : <XCircle size={16} className="text-red-400 mr-2"/>}Respondeu Ticket Principal</li>
+                        <li className="flex items-center p-1">{ticket.checklist?.respondeuPlanilha ? <CheckCircle size={16} className="text-green-400 mr-2"/> : <XCircle size={16} className="text-red-400 mr-2"/>}Atualizou Planilha</li>
+                    </ul>
                 </div>
             )}
             <StopTimerModal isOpen={isStopModalOpen} onClose={() => setIsStopModalOpen(false)} onStopConfirm={handleStopConfirm} ticket={ticket} />
@@ -450,7 +496,8 @@ function App() {
     const [filterPriority, setFilterPriority] = useState('');
     const [filterDifficulty, setFilterDifficulty] = useState('');
     const [filterClient, setFilterClient] = useState('');
-    const [clients, setClients] = useState([]);
+    const [clients, setClients] = useState([]); // This state will hold all clients
+    const [isClientModalOpen, setIsClientModalOpen] = useState(false); // State for global ClientModal
 
     const fetchTickets = useCallback(async () => {
         setIsLoading(true); setError(null);
@@ -518,11 +565,18 @@ function App() {
         let filtered = sortedTickets;
         if (ticketFilter === 'abertos') filtered = filtered.filter(t => t.status !== 'Concluído');
         if (ticketFilter === 'concluidos') filtered = filtered.filter(t => t.status === 'Concluído');
-        if (filterStartDate) filtered = filtered.filter(t => t.creationTime && new Date(t.creationTime) >= new Date(filterStartDate));
-        if (filterEndDate) filtered = filtered.filter(t => t.creationTime && new Date(t.creationTime) <= new Date(filterEndDate + 'T23:59:59'));
+        if (filterStartDate) filtered = filtered.filter(t => t.creationTime && new Date(new Date(filterStartDate).toDateString()) <= new Date(new Date(t.creationTime).toDateString()));
+        if (filterEndDate) filtered = filtered.filter(t => {
+            const ticketDate = new Date(t.creationTime);
+            // Normalize both dates to avoid time zone issues by comparing date strings
+            const ticketDateString = ticketDate.toISOString().split('T')[0];
+            const filterEndDateString = new Date(filterEndDate).toISOString().split('T')[0];
+            return ticketDateString <= filterEndDateString;
+        });
+
         if (filterPriority) filtered = filtered.filter(t => t.priority === filterPriority);
         if (filterDifficulty) filtered = filtered.filter(t => t.difficulty === filterDifficulty);
-        if (filterClient) filtered = filtered.filter(t => t.accountName && t.accountName.toLowerCase().includes(filterClient.toLowerCase()));
+        if (filterClient) filtered = filtered.filter(t => t.accountName === filterClient); // Exact match for dropdown
         return filtered;
     }, [tickets, ticketFilter, activeTicketId, filterStartDate, filterEndDate, filterPriority, filterDifficulty, filterClient]);
 
@@ -564,67 +618,112 @@ function App() {
                                     <option value="concluidos">Concluídos</option>
                                     <option value="todos">Todos</option>
                                 </select>
-                                <button onClick={() => setShowAdvancedFilters(v => !v)} className="ml-2 px-2 py-1 text-xs rounded bg-indigo-600 hover:bg-indigo-700 text-white">{showAdvancedFilters ? 'Ocultar Filtros' : 'Filtros Avançados'}</button>
+                                <button onClick={() => setShowAdvancedFilters(v => !v)} className="ml-2 px-3 py-2 text-xs rounded bg-indigo-600 hover:bg-indigo-700 text-white flex items-center space-x-1">
+                                    <Filter size={14}/>
+                                    <span>{showAdvancedFilters ? 'Ocultar Filtros' : 'Filtros Avançados'}</span>
+                                </button>
                             </div>
-                            <button onClick={() => { setEditingTicket(null); setShowTicketForm(prev => !prev);}} className="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-150 ease-in-out flex items-center space-x-2 w-full sm:w-auto justify-center"><PlusCircle size={20} /><span>{showTicketForm && !editingTicket ? 'Fechar Formulário' : (editingTicket ? 'Fechar Edição' : 'Adicionar Ticket')}</span></button>
+                            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto"> {/* Wrapper for buttons */}
+                                <button 
+                                    onClick={() => setIsClientModalOpen(true)} 
+                                    className="bg-teal-500 hover:bg-teal-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-150 ease-in-out flex items-center space-x-2 w-full sm:w-auto justify-center"
+                                >
+                                    <UserPlus size={20} />
+                                    <span>Cadastrar Cliente</span>
+                                </button>
+                                <button 
+                                    onClick={() => { setEditingTicket(null); setShowTicketForm(prev => !prev);}} 
+                                    className="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-150 ease-in-out flex items-center space-x-2 w-full sm:w-auto justify-center"
+                                >
+                                    <PlusCircle size={20} />
+                                    <span>{showTicketForm && !editingTicket ? 'Fechar Formulário' : (editingTicket ? 'Fechar Edição' : 'Adicionar Ticket')}</span>
+                                </button>
+                            </div>
                         </div>
                         {showAdvancedFilters && (
-                            <div className="mb-4 flex flex-wrap gap-4 bg-slate-800 p-4 rounded-lg shadow">
-                                <div>
-                                    <label className="block text-xs text-gray-300 mb-1">Data Inicial</label>
-                                    <input type="date" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} className="bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-gray-300 mb-1">Data Final</label>
-                                    <input type="date" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} className="bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-gray-300 mb-1">Prioridade</label>
-                                    <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)} className="bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm">
-                                        <option value="">Todas</option>
-                                        <option value="Solicitado por Terceiros">Solicitado por Terceiros</option>
-                                        <option value="Alto Impacto">Alto Impacto</option>
-                                        <option value="Médio Impacto">Médio Impacto</option>
-                                        <option value="Baixo Impacto">Baixo Impacto</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-gray-300 mb-1">Dificuldade</label>
-                                    <select value={filterDifficulty} onChange={e => setFilterDifficulty(e.target.value)} className="bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm">
-                                        <option value="">Todas</option>
-                                        <option value="Fácil">Fácil</option>
-                                        <option value="Médio">Médio</option>
-                                        <option value="Difícil">Difícil</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-gray-300 mb-1">Cliente</label>
-                                    <input
-                                        type="text"
-                                        value={filterClient}
-                                        onChange={e => setFilterClient(e.target.value)}
-                                        placeholder="Buscar cliente"
-                                        className="bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm"
-                                        list="filter-client-list"
-                                    />
-                                    <datalist id="filter-client-list">
-                                        {clients.filter(c => c.name.toLowerCase().includes(filterClient.toLowerCase())).map(c => (
-                                            <option key={c.id} value={c.name} />
-                                        ))}
-                                    </datalist>
-                                </div>
-                                <div className="flex items-end">
-                                    <button onClick={() => { setFilterStartDate(''); setFilterEndDate(''); setFilterPriority(''); setFilterDifficulty(''); setFilterClient(''); }} className="ml-2 px-3 py-2 text-xs rounded bg-slate-600 hover:bg-slate-700 text-white">Limpar Filtros</button>
+                            <div className="mb-6 bg-slate-800 p-4 rounded-lg shadow">
+                                <h4 className="text-lg font-semibold text-gray-100 mb-3">Filtros Avançados</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 items-end">
+                                    <div>
+                                        <label htmlFor="filterStartDate" className="block text-xs font-medium text-gray-300 mb-1">Data Inicial</label>
+                                        <input type="date" id="filterStartDate" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} className="w-full bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm" />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="filterEndDate" className="block text-xs font-medium text-gray-300 mb-1">Data Final</label>
+                                        <input type="date" id="filterEndDate" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} className="w-full bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm" />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="filterPriority" className="block text-xs font-medium text-gray-300 mb-1">Prioridade</label>
+                                        <select id="filterPriority" value={filterPriority} onChange={e => setFilterPriority(e.target.value)} className="w-full bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm">
+                                            <option value="">Todas</option>
+                                            <option value="Solicitado por Terceiros">Solicitado por Terceiros</option>
+                                            <option value="Alto Impacto">Alto Impacto</option>
+                                            <option value="Médio Impacto">Médio Impacto</option>
+                                            <option value="Baixo Impacto">Baixo Impacto</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label htmlFor="filterDifficulty" className="block text-xs font-medium text-gray-300 mb-1">Dificuldade</label>
+                                        <select id="filterDifficulty" value={filterDifficulty} onChange={e => setFilterDifficulty(e.target.value)} className="w-full bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm">
+                                            <option value="">Todas</option>
+                                            <option value="Fácil">Fácil</option>
+                                            <option value="Médio">Médio</option>
+                                            <option value="Difícil">Difícil</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label htmlFor="filterClientSelect" className="block text-xs font-medium text-gray-300 mb-1">Cliente</label>
+                                        <select
+                                            id="filterClientSelect"
+                                            value={filterClient}
+                                            onChange={e => setFilterClient(e.target.value)}
+                                            className="w-full bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm"
+                                        >
+                                            <option value="">-- Todos os Clientes --</option>
+                                            {clients.map(client => (
+                                                <option key={client.id} value={client.name}>
+                                                    {client.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="self-end"> {/* Aligns button with the bottom of other taller inputs */}
+                                        <button 
+                                            onClick={() => { setFilterStartDate(''); setFilterEndDate(''); setFilterPriority(''); setFilterDifficulty(''); setFilterClient(''); }} 
+                                            className="w-full px-3 py-2 text-sm rounded bg-slate-600 hover:bg-slate-500 text-white" // Adjusted padding and text size
+                                        >
+                                            Limpar Filtros
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )}
-                        {(showTicketForm || editingTicket) && (<TicketForm onTicketAdded={handleTicketAddedOrUpdated} ticketToEdit={editingTicket} onTicketUpdated={handleTicketAddedOrUpdated} onCancelEdit={handleTicketFormClose}/>)}
+                        {(showTicketForm || editingTicket) && (
+                            <TicketForm 
+                                onTicketAdded={handleTicketAddedOrUpdated} 
+                                ticketToEdit={editingTicket} 
+                                onTicketUpdated={handleTicketAddedOrUpdated} 
+                                onCancelEdit={handleTicketFormClose}
+                                clients={clients} // Pass clients list
+                                onOpenClientModal={() => setIsClientModalOpen(true)} // Pass handler to open global modal
+                            />
+                        )}
                         {isLoading && <div className="text-center py-10 text-gray-300">Carregando tickets...</div>}
                         {!isLoading && !error && filteredTickets.length === 0 && !showTicketForm && (<div className="text-center py-10 bg-slate-800 rounded-lg shadow-md"><p className="text-xl text-gray-400">Nenhum ticket encontrado para o filtro atual.</p>{ticketFilter === 'abertos' && <p className="text-gray-500">Adicione um novo ticket para começar ou altere o filtro.</p>}</div>)}
                         {!isLoading && !error && filteredTickets.length > 0 && (<div className="space-y-4">{filteredTickets.map(ticket => (<TicketItem key={ticket.id} ticket={ticket} onToggleTimer={handleToggleTimer} onDeleteTicket={handleDeleteTicket} onEditTicket={handleEditTicket} activeTicketId={activeTicketId}/>))}</div>)}
                     </>)}
                     {currentView === 'reports' && (<ReportsView tickets={tickets} />)}
                 </main>
+                <ClientModal 
+                    isOpen={isClientModalOpen} 
+                    onClose={() => setIsClientModalOpen(false)} 
+                    onClientAdded={() => { 
+                        fetchClients().then(newClients => {
+                            setClients(newClients); // Update clients list in App
+                        });
+                        setIsClientModalOpen(false); 
+                    }} 
+                />
                 <footer className="text-center py-6 text-sm text-gray-500 border-t border-slate-700 mt-10"><p>&copy; {new Date().getFullYear()} Gerenciador de Tempo Local.</p></footer>
             </div>
         </TicketRepositoryContext.Provider>
