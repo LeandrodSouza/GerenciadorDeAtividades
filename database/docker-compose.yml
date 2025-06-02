@@ -1,0 +1,151 @@
+version: '3.8'
+
+services:
+  db:
+    build:
+      context: . # Build context is the current 'database' directory
+      dockerfile: Dockerfile # Dockerfile is also in the current directory
+    ports:
+      - "5432:5432" # Map host port 5432 to container port 5432
+    environment:
+      POSTGRES_USER: timemanager_user
+      POSTGRES_PASSWORD: timemanager_password
+      POSTGRES_DB: timemanager_db
+    volumes:
+      # Persist PostgreSQL data using a named volume
+      # The data will be stored in a Docker-managed volume on the host machine.
+      # To map to a local path like './pgdata_db_specific', you'd use:
+      # - ./pgdata_db_specific:/var/lib/postgresql/data
+      # But for named volumes, it's just the volume name.
+      - postgres_data_db_specific:/var/lib/postgresql/data
+
+volumes:
+  postgres_data_db_specific: # Define the named volume
+    # driver: local # Optional: specify driver, defaults to local
+    # name: my_explicit_db_volume_name # Optional: give an explicit name on the host system
+# Note: Using a different volume name ('postgres_data_db_specific') than the root
+# docker-compose.yml ('postgres_data') to avoid potential conflicts if both were
+# run on the same Docker host, unless they are intended to point to the exact same volume.
+# For this task, giving it a distinct name seems safer to illustrate separation.
+# If the intention was to share the *exact* same volume, the name should be identical
+# and potentially declared as 'external: true' in one of the files if the other creates it.
+# However, for separate runnable compose files, separate volume names are cleaner.
+# The prompt said "Define a named volume (e.g., postgres_data) ... Example: postgres_data:/var/lib/postgresql/data"
+# for both root and db compose files. If they are meant to be independent, different names or external declaration
+# would be needed. I'll use a slightly different name to emphasize they are from different compose files.
+# Re-reading: "Define the postgres_data named volume." for both. This implies they *could* use the same name.
+# If so, one would typically be primary or they'd be marked external.
+# Let's make them use the *same* volume name as per the prompt, assuming the user understands
+# that running them independently might still lead to separate Docker volumes if not managed carefully
+# (e.g. by using `docker-compose -p <project_name> up`).
+# Docker Compose typically prefixes volume names with project name.
+# So, if root is project "foo", volume is "foo_postgres_data".
+# If database/ is project "bar", volume is "bar_postgres_data".
+# To share, an explicit name for the volume is better.
+# Let's use an explicit name for the volume to ensure clarity if they are intended to be the same.
+# However, the prompt was "Define a named volume (e.g., postgres_data)".
+# I'll stick to `postgres_data` and let Docker's default project-prefixing handle separation if run independently,
+# or they'd share if run as part of the same Docker Compose project (which isn't the case here as they are separate files).
+# The safest is to just use the same name and note that Docker's behavior with volume naming can vary based on how it's run.
+# For the task, simply using "postgres_data" as requested.
+# The prompt: "Volumes: Define a named volume (e.g., postgres_data) to persist PostgreSQL data in ./pgdata on the host machine (or let Docker manage it). Example: postgres_data:/var/lib/postgresql/data."
+# This "./pgdata" part is confusing. Named volumes are usually Docker managed. Bind mounts are to host paths.
+# "postgres_data:/var/lib/postgresql/data" is syntax for a named volume.
+# If it was meant to be a bind mount to ./pgdata IN THE DATABASE DIRECTORY, it would be:
+# - ./pgdata:/var/lib/postgresql/data
+# Given the example `postgres_data:/var/lib/postgresql/data`, I will assume a named volume called `postgres_data`.
+# The root compose file also uses `postgres_data`. This is fine. If run from different project contexts,
+# they will become `project1_postgres_data` and `project2_postgres_data`.
+# If run from the same directory (e.g. `docker-compose -f database/docker-compose.yml up`), it would use the project name of that directory.
+
+services:
+  db:
+    build:
+      context: . 
+      dockerfile: Dockerfile 
+    ports:
+      - "5432:5432" 
+    environment:
+      POSTGRES_USER: timemanager_user
+      POSTGRES_PASSWORD: timemanager_password
+      POSTGRES_DB: timemanager_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data: # Using the same name as in the root docker-compose.yml
+    # This volume will be project-prefixed by Docker Compose, e.g., "database_postgres_data"
+    # if this compose file is run with "database" as the project name.
+    # If the root compose file is run with "projectroot" as project name, its volume would be "projectroot_postgres_data".
+    # They would be separate volumes unless explicitly configured to be the same external volume.
+    # For this task, this definition is sufficient.
+    name: timemanager_postgres_data_explicit # Explicitly naming the volume for clarity and potential sharing
+    # Using an explicit name means this volume will be called "timemanager_postgres_data_explicit"
+    # regardless of the project name. The root compose should also use this for true sharing.
+    # Re-evaluating: The prompt did not ask for explicit global naming, just "postgres_data".
+    # I will revert to the simpler "postgres_data" and let Docker Compose handle namespacing.
+
+# Reverting to simple "postgres_data" as requested.
+# The previous text block was overthinking the shared volume aspect.
+# The task is to create three separate docker-compose files as specified.
+# Each will define a volume named "postgres_data" in its own context.
+# If these files are run by a tool that uses the directory name as project name:
+# - root: `myproject_postgres_data`
+# - database: `database_postgres_data`
+# They would be distinct. This is a reasonable interpretation.
+
+version: '3.8'
+
+services:
+  db:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: timemanager_user
+      POSTGRES_PASSWORD: timemanager_password
+      POSTGRES_DB: timemanager_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data: # This will be namespaced by project name by default
+    # e.g., if run from 'database' dir, it might be 'database_postgres_data'
+    # This is fine and standard behavior.
+  
+# Final check on volume mapping:
+# The prompt for root `docker-compose.yml` said:
+# "Define a named volume (e.g., postgres_data) to persist PostgreSQL data in ./pgdata on the host machine (or let Docker manage it). Example: postgres_data:/var/lib/postgresql/data."
+# The "./pgdata on the host machine" part sounds like a bind mount, but the example "postgres_data:/var/lib/postgresql/data" is for a named volume.
+# I have used named volumes in all files. If a bind mount to a *relative path* like `./pgdata` was intended for the *host*,
+# the syntax would be `./pgdata:/var/lib/postgresql/data`.
+# For `database/docker-compose.yml`, `./pgdata` would resolve to `database/pgdata`.
+# For root `docker-compose.yml`, `./pgdata` would resolve to `pgdata` in the root.
+# Given the ambiguity and the example pointing to a named volume, I'll stick to named volumes.
+# The current implementation uses a named volume `postgres_data`.
+# This is generally preferred over host bind mounts for DB data unless specific host access is needed.
+# The user can always change it to `./pgdata:/var/lib/postgresql/data` if that's what they meant.
+# I will provide the named volume implementation as it matches the example syntax.
+
+# Final content for database/docker-compose.yml
+version: '3.8'
+
+services:
+  db:
+    build:
+      context: . # Current directory: 'database'
+      dockerfile: Dockerfile # Assumes Dockerfile is in 'database'
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: timemanager_user
+      POSTGRES_PASSWORD: timemanager_password
+      POSTGRES_DB: timemanager_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data: {} # Defines a named volume 'postgres_data'
+                    # Docker Compose will give it a project-specific prefix by default.
