@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
-import { Clock, Play, Pause, PlusCircle, UserPlus, CalendarDays, Trash2, Edit3, ListChecks, AlertTriangle, CheckCircle, XCircle, ChevronDown, ChevronUp, Save, Filter, FileText, BarChart3, RefreshCw } from 'lucide-react';
+import { Clock, Play, Pause, PlusCircle, UserPlus, CalendarDays, Trash2, Edit3, ListChecks, AlertTriangle, CheckCircle, XCircle, ChevronDown, ChevronUp, Save, Filter, FileText, BarChart3, RefreshCw, LayoutDashboard } from 'lucide-react'; // Added LayoutDashboard
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
@@ -106,6 +106,13 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message }) => {
         </Modal>
     );
 };
+
+const KANBAN_COLUMNS = [
+    { id: 'Pendente', title: 'Pendente (Backlog)', status: 'Pendente' },
+    { id: 'EmProgresso', title: 'Em Progresso', status: 'Em Progresso' },
+    { id: 'Pausado', title: 'Pausado', status: 'Pausado' },
+    { id: 'Concluido', title: 'Concluído', status: 'Concluído' }
+];
 
 const ToastMessage = ({ message, type, onDismiss }) => {
     if (!message) return null;
@@ -393,6 +400,158 @@ const TicketModal = ({
 };
 // --- End of TicketModal (formerly TicketForm) ---
 
+// κανban Card Component - STYLING REFINED
+const KanbanCard = ({ ticket, onEditTicket, onDeleteTicket, onToggleTimer, activeTicketId, getPriorityClass, formatTime, formatDateTimeFromISO, StopTimerModalComponent, ConfirmationModalComponent }) => {
+    const [currentElapsedTime, setCurrentElapsedTime] = useState(ticket.elapsedTime || 0);
+    const [timerIntervalId, setTimerIntervalId] = useState(null);
+    const isActive = ticket.id === activeTicketId;
+
+    useEffect(() => {
+        setCurrentElapsedTime(ticket.elapsedTime || 0);
+        let intervalId = timerIntervalId; 
+    
+        if (isActive && ticket.status === 'Em Progresso' && ticket.currentTimerStartTime) {
+            const startTime = new Date(ticket.currentTimerStartTime).getTime();
+            const updateTimer = () => {
+                const now = Date.now();
+                const sessionSeconds = Math.max(0, Math.floor((now - startTime) / 1000));
+                setCurrentElapsedTime((ticket.elapsedTime || 0) + sessionSeconds);
+            };
+            updateTimer();
+            intervalId = setInterval(updateTimer, 1000); 
+            setTimerIntervalId(intervalId);
+        } else if (intervalId) { 
+            clearInterval(intervalId);
+            setTimerIntervalId(null);
+        }
+    
+        return () => { 
+            if (intervalId) clearInterval(intervalId);
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps 
+    }, [isActive, ticket.status, ticket.currentTimerStartTime, ticket.elapsedTime]);
+
+    const [isStopModalOpen, setIsStopModalOpen] = useState(false);
+    const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
+
+    const handleToggle = () => {
+        if (isActive && ticket.status === 'Em Progresso') {
+            setIsStopModalOpen(true);
+        } else {
+            if (ticket.status !== 'Concluído') {
+                onToggleTimer(ticket.id, ticket.status);
+            }
+        }
+    };
+    const handleStopConfirm = async (reason, checklist, isCompleting) => { 
+        await onToggleTimer(ticket.id, ticket.status, reason, checklist, isCompleting); 
+        setIsStopModalOpen(false); 
+    };
+
+    const cardBorderColor = isActive && ticket.status === 'Em Progresso' 
+        ? 'border-green-400'
+        : ticket.status === 'Pausado' 
+        ? 'border-yellow-400' 
+        : ticket.status === 'Pendente'
+        ? 'border-sky-400'
+        : 'border-slate-600'; 
+
+    return (
+        <div className={`bg-slate-800/80 p-4 rounded-lg shadow-lg hover:shadow-indigo-500/40 transition-all duration-200 ease-in-out border-l-4 ${cardBorderColor} space-y-2`}>
+            <h4 className="font-semibold text-gray-50 text-base leading-tight truncate" title={ticket.subject}>{ticket.subject}</h4>
+            <p className="text-xs text-gray-400 truncate" title={ticket.accountName || 'N/A'}>Cliente: {ticket.accountName || 'N/A'}</p>
+            <p className={`text-xs truncate font-medium ${getPriorityClass(ticket.priority)}`}>Prioridade: {ticket.priority}</p>
+            <p className="text-xs text-gray-500">Criado: {formatDateFromISO(ticket.createdAt)}</p>
+
+            <div className="flex justify-between items-center pt-2">
+                <div className={`text-base font-mono tracking-tight flex items-center ${isActive && ticket.status === 'Em Progresso' ? 'text-green-300 animate-pulse' : 'text-indigo-300'}`}>
+                    <Clock size={15} className="inline mr-1.5" />
+                    {formatTime(currentElapsedTime)}
+                </div>
+                {ticket.status !== 'Concluído' && (
+                    <button 
+                        onClick={handleToggle} 
+                        title={isActive && ticket.status === 'Em Progresso' ? 'Pausar/Completar Tarefa' : (ticket.status === 'Pausado' ? 'Retomar Tarefa' : 'Iniciar Tarefa')}
+                        className={`p-2 rounded-md text-white shadow-md hover:shadow-lg transition-all duration-150 ${isActive && ticket.status === 'Em Progresso' ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
+                    >
+                        {isActive && ticket.status === 'Em Progresso' ? <Pause size={16} /> : <Play size={16} />}
+                    </button>
+                )}
+           </div>
+           
+           <div className="flex justify-end space-x-2 mt-3 pt-3 border-t border-slate-700">
+               <button onClick={() => onEditTicket(ticket)} title="Editar Ticket" className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-sm hover:shadow-md"><Edit3 size={14} /></button>
+               <button onClick={() => setIsConfirmDeleteOpen(true)} title="Excluir Ticket" className="p-2 bg-slate-600/80 text-white rounded-md hover:bg-slate-500 transition-colors shadow-sm hover:shadow-md"><Trash2 size={14} /></button>
+           </div>
+
+            {isStopModalOpen && StopTimerModalComponent && <StopTimerModalComponent isOpen={isStopModalOpen} onClose={() => setIsStopModalOpen(false)} onStopConfirm={handleStopConfirm} ticket={ticket} />}
+            {isConfirmDeleteOpen && ConfirmationModalComponent && <ConfirmationModalComponent isOpen={isConfirmDeleteOpen} onClose={() => setIsConfirmDeleteOpen(false)} onConfirm={() => { onDeleteTicket(ticket.id); setIsConfirmDeleteOpen(false); }} title="Confirmar Exclusão" message={`Tem certeza que deseja excluir o ticket "${ticket.subject}"?`} />}
+        </div>
+    );
+};
+
+const KanbanColumn = ({ title, ticketsInColumn, onEditTicket, onDeleteTicket, onToggleTimer, activeTicketId, getPriorityClass, formatTime, formatDateTimeFromISO, StopTimerModalComponent, ConfirmationModalComponent }) => {
+    return (
+        <div className="bg-slate-700/60 p-4 rounded-xl w-[350px] md:w-[380px] flex-shrink-0 shadow-2xl flex flex-col"> {/* Slightly wider, more padding, softer bg */}
+            <h3 className="text-xl font-bold text-gray-100 mb-5 px-2 pt-1 border-b-2 border-slate-500/80 pb-3 tracking-wide flex justify-between items-center">
+                <span>{title}</span>
+                <span className="text-base font-semibold bg-slate-500/70 px-3 py-1 rounded-full text-gray-50 shadow-sm">{ticketsInColumn.length}</span>
+            </h3>
+            {/* Added scrollbar styling directly */}
+            <div className="space-y-4 overflow-y-auto flex-grow max-h-[calc(100vh-320px)] p-2 scrollbar-thin scrollbar-thumb-slate-500/60 scrollbar-track-slate-800/60 scrollbar-thumb-rounded-md">
+                {ticketsInColumn.map(ticket => (
+                    <KanbanCard 
+                        key={ticket.id} 
+                        ticket={ticket}
+                        onEditTicket={onEditTicket}
+                        onDeleteTicket={onDeleteTicket}
+                        onToggleTimer={onToggleTimer}
+                        activeTicketId={activeTicketId}
+                        getPriorityClass={getPriorityClass}
+                        formatTime={formatTime}
+                        formatDateTimeFromISO={formatDateTimeFromISO}
+                        StopTimerModalComponent={StopTimerModal} 
+                        ConfirmationModalComponent={ConfirmationModal}
+                    />
+                ))}
+                {ticketsInColumn.length === 0 && (
+                    <div className="flex items-center justify-center h-40 border-2 border-dashed border-slate-600/80 rounded-lg">
+                        <p className="text-md text-slate-500 italic">Nenhum ticket aqui.</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const KanbanView = ({ columns, groupedTickets, onEditTicket, onDeleteTicket, onToggleTimer, activeTicketId, getPriorityClass, formatTime, formatDateTimeFromISO }) => {
+    if (!columns || !groupedTickets) {
+        return <div className="text-center p-10 text-gray-400 text-lg">Carregando quadro Kanban...</div>;
+    }
+
+    return (
+        <div className="p-4 sm:p-5 bg-slate-800/80 rounded-xl shadow-2xl min-h-[calc(100vh-180px)]"> {/* Enhanced padding, shadow, adjusted min-height for header changes */}
+            <h2 className="text-3xl font-bold mb-8 text-gray-50 tracking-wider">Quadro Kanban</h2>
+            <div className="flex space-x-5 overflow-x-auto pb-5 min-w-full scrollbar-thin scrollbar-thumb-slate-600/80 scrollbar-track-slate-700/50 scrollbar-thumb-rounded-md"> {/* Enhanced spacing and scrollbar */}
+                {columns.map(column => (
+                    <KanbanColumn
+                        key={column.id}
+                        title={column.title}
+                        ticketsInColumn={groupedTickets[column.status] || []}
+                        onEditTicket={onEditTicket}
+                        onDeleteTicket={onDeleteTicket}
+                        onToggleTimer={onToggleTimer}
+                        activeTicketId={activeTicketId}
+                        getPriorityClass={getPriorityClass}
+                        formatTime={formatTime}
+                        formatDateTimeFromISO={formatDateTimeFromISO}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+};
+
 const StopTimerModal = ({ isOpen, onClose, onStopConfirm, ticket }) => {
     const [reason, setReason] = useState('');
     const [respondeuTicket, setRespondeuTicket] = useState(false);
@@ -610,6 +769,38 @@ function App() {
     const [isClientModalOpen, setIsClientModalOpen] = useState(false); // State for global ClientModal
     const [toast, setToast] = useState({ message: '', type: '', key: 0 }); // Toast state
 
+    const groupedTicketsForKanban = useMemo(() => {
+        const groups = {};
+        KANBAN_COLUMNS.forEach(column => {
+            groups[column.status] = []; 
+        });
+
+        tickets.forEach(ticket => {
+            if (groups[ticket.status]) {
+                groups[ticket.status].push(ticket);
+            } else {
+                console.warn(`Ticket ${ticket.id} with unhandled status: ${ticket.status}`);
+                // If you want an 'Other' column for tickets with undefined statuses:
+                // if (!groups['Other']) groups['Other'] = [];
+                // groups['Other'].push(ticket);
+            }
+        });
+
+        KANBAN_COLUMNS.forEach(column => {
+             if (groups[column.status]) {
+                 groups[column.status].sort((a, b) => {
+                     const timeA = new Date(a.lastUpdatedAt || a.createdAt);
+                     const timeB = new Date(b.lastUpdatedAt || b.createdAt);
+                     return timeB - timeA; 
+                 });
+             }
+         });
+        // If you had an 'Other' group, you might want to sort it too:
+        // if (groups['Other']) { ... sort groups['Other'] ... }
+
+        return groups;
+    }, [tickets]);
+
     const showToast = (message, type = 'info') => {
         const newKey = Date.now();
         setToast({ message, type, key: newKey });
@@ -742,9 +933,10 @@ function App() {
                 {toast.message && <ToastMessage key={toast.key} message={toast.message} type={toast.type} onDismiss={() => setToast({ message: '', type: '', key: 0 })} />}
                 <header className="bg-slate-800/50 backdrop-blur-md shadow-lg p-4 sticky top-0 z-40">
                     <div className="container mx-auto flex flex-col sm:flex-row justify-between items-center">
-                        <div className="flex items-center space-x-2 mb-2 sm:mb-0"><BarChart3 size={32} className="text-indigo-400" /><h1 className="text-2xl font-bold tracking-tight text-white">Gerenciador de Tempo Local</h1></div>
+                        <div className="flex items-center space-x-2 mb-2 sm:mb-0"><BarChart3 size={32} className="text-indigo-400" /><h1 className="text-2xl font-bold tracking-tight text-white">Gerenciador de Tempo</h1></div>
                         <nav className="flex space-x-1 sm:space-x-3 items-center">
-                            <button onClick={() => setCurrentView('tickets')} className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentView === 'tickets' ? 'bg-indigo-500 text-white' : 'text-gray-300 hover:bg-slate-700 hover:text-white'}`}><ListChecks size={18} className="inline mr-1" /> Tickets</button>
+                            <button onClick={() => setCurrentView('tickets')} className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentView === 'tickets' ? 'bg-indigo-500 text-white' : 'text-gray-300 hover:bg-slate-700 hover:text-white'}`}><ListChecks size={18} className="inline mr-1" /> Lista</button>
+                            <button onClick={() => setCurrentView('kanban')} className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentView === 'kanban' ? 'bg-indigo-500 text-white' : 'text-gray-300 hover:bg-slate-700 hover:text-white'}`}><LayoutDashboard size={18} className="inline mr-1" /> Kanban</button>
                             <button onClick={() => setCurrentView('reports')} className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentView === 'reports' ? 'bg-indigo-500 text-white' : 'text-gray-300 hover:bg-slate-700 hover:text-white'}`}><FileText size={18} className="inline mr-1" /> Relatórios</button>
                             <button onClick={fetchTickets} title="Recarregar Tickets" className="p-2 text-gray-300 hover:bg-slate-700 hover:text-white rounded-md"><RefreshCw size={18} className={isLoading ? "animate-spin" : ""}/></button>
                         </nav>
@@ -855,9 +1047,22 @@ function App() {
                         )}
                         {/* Conditional rendering of TicketModal removed from here */}
                         {isLoading && <div className="text-center py-10 text-gray-300">Carregando tickets...</div>}
-                        {!isLoading && !error && filteredTickets.length === 0 && !isTicketModalOpen && (<div className="text-center py-10 bg-slate-800 rounded-lg shadow-md"><p className="text-xl text-gray-400">Nenhum ticket encontrado para o filtro atual.</p>{ticketFilter === 'abertos' && <p className="text-gray-500">Adicione um novo ticket para começar ou altere o filtro.</p>}</div>)}
-                        {!isLoading && !error && filteredTickets.length > 0 && (<div className="space-y-4">{filteredTickets.map(ticket => (<TicketItem key={ticket.id} ticket={ticket} onToggleTimer={handleToggleTimer} onDeleteTicket={handleDeleteTicket} onEditTicket={handleEditTicket} activeTicketId={activeTicketId}/>))}</div>)}
+                        {!isLoading && !error && filteredTickets.length === 0 && !isTicketModalOpen && currentView === 'tickets' && (<div className="text-center py-10 bg-slate-800 rounded-lg shadow-md"><p className="text-xl text-gray-400">Nenhum ticket encontrado para o filtro atual.</p>{ticketFilter === 'abertos' && <p className="text-gray-500">Adicione um novo ticket para começar ou altere o filtro.</p>}</div>)}
+                        {!isLoading && !error && filteredTickets.length > 0 && currentView === 'tickets' && (<div className="space-y-4">{filteredTickets.map(ticket => (<TicketItem key={ticket.id} ticket={ticket} onToggleTimer={handleToggleTimer} onDeleteTicket={handleDeleteTicket} onEditTicket={handleEditTicket} activeTicketId={activeTicketId}/>))}</div>)}
                     </>)}
+                    {currentView === 'kanban' && (
+                        <KanbanView 
+                            columns={KANBAN_COLUMNS} 
+                            groupedTickets={groupedTicketsForKanban}
+                            onEditTicket={handleEditTicket}
+                            onDeleteTicket={handleDeleteTicket}
+                            onToggleTimer={handleToggleTimer}
+                            activeTicketId={activeTicketId}
+                            getPriorityClass={getPriorityClass} // This is a global utility function
+                            formatTime={formatTime} // This is a global utility function
+                            formatDateTimeFromISO={formatDateTimeFromISO} // This is a global utility function
+                        />
+                    )}
                     {currentView === 'reports' && (<ReportsView tickets={tickets} />)}
                 </main>
                 <TicketModal
