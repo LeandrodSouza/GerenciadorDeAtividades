@@ -1,38 +1,18 @@
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { 
-    getFirestore, 
-    collection, 
-    addDoc, 
-    doc, 
-    getDoc,
-    onSnapshot, 
-    query, 
-    updateDoc,
-    Timestamp,
-    deleteDoc,
-    serverTimestamp,
-    // where // Keep for potential future use in reports
-} from 'firebase/firestore';
+// Firebase imports removed
 import { Clock, Play, Pause, PlusCircle, CalendarDays, Trash2, Edit3, ListChecks, AlertTriangle, CheckCircle, XCircle, ChevronDown, ChevronUp, Save, Filter, FileText, BarChart3 } from 'lucide-react';
+import postgresTicketService from './postgresTicketService'; // Import the new service
 
-// --- Configuração do Firebase ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-    apiKey: "YOUR_API_KEY", 
-    authDomain: "YOUR_AUTH_DOMAIN",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
-};
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-time-manager-app-refactored';
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app); // Firestore instance
+// --- Configuração do Firebase (REMOVIDA) ---
+// const firebaseConfig = ... (removido)
+// const appId = ... (removido)
+// const app = ... (removido)
+// const auth = ... (removido)
+// const db = ... (removido)
+const appId = 'local-dev-app'; // Placeholder if still used in UI, otherwise remove
 
 // --- Definição da Entidade (Conceitual) ---
-// Em um projeto maior, TicketEntity seria uma classe ou interface em um arquivo separado.
+// Mantém-se a mesma, mas Timestamp será JS Date
 // interface TicketEntity {
 //   id?: string;
 //   ticketIdInput: string;
@@ -40,107 +20,23 @@ const db = getFirestore(app); // Firestore instance
 //   accountName: string;
 //   priority: string;
 //   difficulty: string;
-//   creationTime: Timestamp;
+//   creationTime: Date; // Alterado de Timestamp para Date
 //   status: 'Pendente' | 'Em Progresso' | 'Pausado' | 'Concluído';
 //   elapsedTime: number;
 //   isActive: boolean;
-//   log: Array<{ timestamp: Timestamp; action: string; reason?: string; checklist?: object }>;
+//   log: Array<{ timestamp: Date; action: string; reason?: string; checklist?: object }>; // Alterado de Timestamp para Date
 //   checklist: { respondeuTicket: boolean; respondeuPlanilha: boolean };
 //   userId: string;
-//   currentTimerStartTime?: Timestamp | null;
-//   lastUpdatedAt?: Timestamp;
-//   createdAt?: Timestamp;
+//   currentTimerStartTime?: Date | null; // Alterado de Timestamp para Date
+//   lastUpdatedAt?: Date; // Alterado de Timestamp para Date
+//   createdAt?: Date; // Alterado de Timestamp para Date
 // }
 
-// --- Camada de Serviço de Persistência (Firebase Ticket Repository Adapter) ---
-// Implementa (conceitualmente) uma ITicketRepositoryPort
-const firebaseTicketService = {
-    _getTicketsCollectionPath: (userId) => `artifacts/${appId}/users/${userId}/tickets`,
-
-    // Converte dados do Firestore para um formato mais próximo da entidade
-    _fromFirestore: (docSnap) => {
-        if (!docSnap.exists()) return null;
-        const data = docSnap.data();
-        return {
-            id: docSnap.id,
-            ...data,
-            // Garante que Timestamps sejam Timestamps
-            creationTime: data.creationTime instanceof Timestamp ? data.creationTime : Timestamp.fromDate(new Date()),
-            currentTimerStartTime: data.currentTimerStartTime instanceof Timestamp ? data.currentTimerStartTime : null,
-            lastUpdatedAt: data.lastUpdatedAt instanceof Timestamp ? data.lastUpdatedAt : null,
-            createdAt: data.createdAt instanceof Timestamp ? data.createdAt : null,
-            log: Array.isArray(data.log) ? data.log.map(l => ({...l, timestamp: l.timestamp instanceof Timestamp ? l.timestamp : Timestamp.now() })) : [],
-        };
-    },
-
-    // Converte dados da entidade para o formato do Firestore
-    _toFirestore: (ticketData) => {
-        const data = { ...ticketData };
-        delete data.id; // ID não é armazenado no documento em si
-        // Timestamps já devem estar no formato correto ou ser serverTimestamp()
-        return data;
-    },
-
-    async addTicket(userId, ticketData) {
-        const collectionPath = this._getTicketsCollectionPath(userId);
-        const dataToSave = this._toFirestore({
-            ...ticketData,
-            createdAt: serverTimestamp(),
-            lastUpdatedAt: serverTimestamp(),
-        });
-        const docRef = await addDoc(collection(db, collectionPath), dataToSave);
-        return docRef.id;
-    },
-
-    async getTicket(userId, ticketId) {
-        const docRef = doc(db, this._getTicketsCollectionPath(userId), ticketId);
-        const docSnap = await getDoc(docRef);
-        return this._fromFirestore(docSnap);
-    },
-
-    async updateTicket(userId, ticketId, data) {
-        const docRef = doc(db, this._getTicketsCollectionPath(userId), ticketId);
-        const dataToSave = this._toFirestore({
-            ...data,
-            lastUpdatedAt: serverTimestamp(),
-        });
-        await updateDoc(docRef, dataToSave);
-    },
-
-    async deleteTicket(userId, ticketId) {
-        const docRef = doc(db, this._getTicketsCollectionPath(userId), ticketId);
-        await deleteDoc(docRef);
-    },
-
-    subscribeToTickets(userId, onUpdate) {
-        const collectionPath = this._getTicketsCollectionPath(userId);
-        const q = query(collection(db, collectionPath));
-        
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
-            const ticketsData = [];
-            let currentActiveId = null;
-            querySnapshot.forEach((docSnap) => {
-                const ticket = this._fromFirestore(docSnap);
-                if (ticket) {
-                    ticketsData.push(ticket);
-                    if (ticket.isActive && ticket.status === 'Em Progresso') {
-                        currentActiveId = ticket.id;
-                    }
-                }
-            });
-            onUpdate(ticketsData, currentActiveId);
-        }, (error) => {
-            console.error("Error in subscribeToTickets:", error);
-            onUpdate([], null, error); // Pass error to callback
-        });
-        return unsubscribe; // Retorna a função de cancelamento da inscrição
-    }
-};
+// --- Camada de Serviço de Persistência (Firebase Ticket Repository Adapter - REMOVIDO) ---
+// const firebaseTicketService = { ... }; // Removido
 
 // --- Contexto do Repositório de Tickets ---
-// Em um projeto maior, ITicketRepository seria uma interface TypeScript.
-// const ITicketRepository = { /* ... metodos ... */ }
-const TicketRepositoryContext = createContext(firebaseTicketService); // Fornece o serviço Firebase por padrão
+const TicketRepositoryContext = createContext(postgresTicketService); // Fornece o serviço PostgreSQL por padrão
 
 // Hook para usar o repositório de tickets
 const useTicketRepository = () => useContext(TicketRepositoryContext);
@@ -153,21 +49,18 @@ const formatTime = (totalSeconds) => {
     const seconds = totalSeconds % 60;
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 };
-const formatDate = (timestamp) => {
-    if (!timestamp) return 'N/A';
-    if (timestamp instanceof Timestamp) return timestamp.toDate().toLocaleDateString('pt-BR');
-    if (typeof timestamp === 'string') {
-        const date = new Date(timestamp);
-        if (isNaN(date.getTime())) return 'Data inválida';
-        const userTimezoneOffset = date.getTimezoneOffset() * 60000;
-        return new Date(date.getTime() + userTimezoneOffset).toLocaleDateString('pt-BR');
-    }
-    return 'Data inválida';
+const formatDate = (dateInput) => {
+    if (!dateInput) return 'N/A';
+    const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+    if (isNaN(date.getTime())) return 'Data inválida';
+    // For display, usually better to let browser handle local timezone rendering
+    return date.toLocaleDateString('pt-BR');
 };
-const formatDateTime = (timestamp) => {
-    if (!timestamp) return 'N/A';
-    if (timestamp instanceof Timestamp) return timestamp.toDate().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-    return 'Data/Hora inválida';
+const formatDateTime = (dateInput) => {
+    if (!dateInput) return 'N/A';
+    const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+    if (isNaN(date.getTime())) return 'Data/Hora inválida';
+    return date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 };
 
 // --- Componentes (a maioria permanece igual na sua estrutura, mas usará o serviço) ---
@@ -219,7 +112,9 @@ const TicketForm = ({ userId, onTicketAdded, ticketToEdit, onTicketUpdated, onCa
             setAccountName(ticketToEdit.accountName || '');
             setPriority(ticketToEdit.priority || 'Médio Impacto');
             setDifficulty(ticketToEdit.difficulty || 'Médio');
-            setCreationDate(ticketToEdit.creationTime ? (ticketToEdit.creationTime.toDate ? ticketToEdit.creationTime.toDate().toISOString().split('T')[0] : new Date().toISOString().split('T')[0]) : new Date().toISOString().split('T')[0]);
+            // Ensure creationTime is handled as JS Date
+            const initialCreationDate = ticketToEdit.creationTime ? (ticketToEdit.creationTime instanceof Date ? ticketToEdit.creationTime : new Date(ticketToEdit.creationTime)) : new Date();
+            setCreationDate(initialCreationDate.toISOString().split('T')[0]);
         } else {
             setTicketIdInput(''); setSubject(''); setAccountName('');
             setPriority('Médio Impacto'); setDifficulty('Médio');
@@ -243,18 +138,19 @@ const TicketForm = ({ userId, onTicketAdded, ticketToEdit, onTicketUpdated, onCa
             accountName: accountName.trim(),
             priority,
             difficulty,
-            creationTime: Timestamp.fromDate(new Date(creationDate + "T00:00:00")), // Garante que é o início do dia
+            creation_time: new Date(creationDate + "T00:00:00Z"), // Use ISO string, field name matches DB
             status: ticketToEdit ? ticketToEdit.status : 'Pendente',
-            elapsedTime: ticketToEdit ? ticketToEdit.elapsedTime : 0,
-            isActive: ticketToEdit ? ticketToEdit.isActive : false,
+            elapsed_time: ticketToEdit ? ticketToEdit.elapsed_time : 0, // field name matches DB
+            is_active: ticketToEdit ? ticketToEdit.is_active : false, // field name matches DB
             log: ticketToEdit ? ticketToEdit.log : [],
             checklist: ticketToEdit ? ticketToEdit.checklist : { respondeuTicket: false, respondeuPlanilha: false },
-            userId,
-            // createdAt e lastUpdatedAt serão definidos pelo serviço
+            user_id: userId, // field name matches DB
+            // created_at e last_updated_at são definidos pelo serviço/DB
         };
-        // Se estiver editando, preserva o ID e createdAt original
+        // Se estiver editando, preserva o ID e created_at original (service might ignore created_at on update)
         if (ticketToEdit) {
-            ticketDataObject.createdAt = ticketToEdit.createdAt;
+            // ticketDataObject.id = ticketToEdit.id; // ID passed separately to updateTicket
+            ticketDataObject.created_at = ticketToEdit.created_at;
         }
 
 
@@ -430,19 +326,24 @@ const TicketItem = ({ ticket, onToggleTimer, onDeleteTicket, onEditTicket, activ
     const isActive = ticket.id === activeTicketId;
 
     useEffect(() => {
-        setCurrentElapsedTime(ticket.elapsedTime); 
-        if (isActive && ticket.status === 'Em Progresso' && ticket.currentTimerStartTime) {
-            const initialNow = Timestamp.now();
-            // currentTimerStartTime pode ser null se o ticket foi ativado mas o dado ainda não propagou
-            const startTimeSeconds = ticket.currentTimerStartTime instanceof Timestamp ? ticket.currentTimerStartTime.seconds : initialNow.seconds;
-            const initialSessionSeconds = initialNow.seconds - startTimeSeconds;
-            setCurrentElapsedTime(ticket.elapsedTime + initialSessionSeconds);
+        setCurrentElapsedTime(ticket.elapsed_time); // field name matches DB
+        if (isActive && ticket.status === 'Em Progresso' && ticket.current_timer_start_time) {
+            const initialNow = new Date();
+            // current_timer_start_time can be null or a string/Date from DB
+            const startTimeMs = ticket.current_timer_start_time instanceof Date 
+                ? ticket.current_timer_start_time.getTime() 
+                : (ticket.current_timer_start_time ? new Date(ticket.current_timer_start_time).getTime() : initialNow.getTime());
+            
+            const initialSessionSeconds = Math.floor((initialNow.getTime() - startTimeMs) / 1000);
+            setCurrentElapsedTime(ticket.elapsed_time + initialSessionSeconds);
 
             const intervalId = setInterval(() => {
-                const now = Timestamp.now();
-                const currentStartTimeSeconds = ticket.currentTimerStartTime instanceof Timestamp ? ticket.currentTimerStartTime.seconds : now.seconds;
-                const sessionSeconds = now.seconds - currentStartTimeSeconds;
-                setCurrentElapsedTime(ticket.elapsedTime + sessionSeconds);
+                const now = new Date();
+                const currentStartTimeMs = ticket.current_timer_start_time instanceof Date 
+                    ? ticket.current_timer_start_time.getTime() 
+                    : (ticket.current_timer_start_time ? new Date(ticket.current_timer_start_time).getTime() : now.getTime());
+                const sessionSeconds = Math.floor((now.getTime() - currentStartTimeMs) / 1000);
+                setCurrentElapsedTime(ticket.elapsed_time + sessionSeconds);
             }, 1000);
             setTimerIntervalId(intervalId);
             return () => clearInterval(intervalId);
@@ -450,7 +351,7 @@ const TicketItem = ({ ticket, onToggleTimer, onDeleteTicket, onEditTicket, activ
             clearInterval(timerIntervalId);
             setTimerIntervalId(null);
         }
-    }, [isActive, ticket.status, ticket.currentTimerStartTime, ticket.elapsedTime]);
+    }, [isActive, ticket.status, ticket.current_timer_start_time, ticket.elapsed_time, timerIntervalId]); // Added timerIntervalId to dependencies
 
 
     const handleToggle = () => {
@@ -501,14 +402,14 @@ const TicketItem = ({ ticket, onToggleTimer, onDeleteTicket, onEditTicket, activ
                             {expanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                         </button>
                     </div>
-                    <p className="text-sm ">ID: {ticket.ticketIdInput} | Conta: {ticket.accountName || 'N/A'}</p>
+                    <p className="text-sm ">ID: {ticket.ticket_id_input} | Conta: {ticket.account_name || 'N/A'}</p>
                     <p className="text-sm ">Prioridade: <span className={getPriorityClass(ticket.priority)}>{ticket.priority}</span> | Dificuldade: {ticket.difficulty}</p>
-                    <p className="text-sm ">Criado em: {formatDate(ticket.creationTime)}</p>
+                    <p className="text-sm ">Criado em: {formatDate(ticket.creation_time)}</p>
                     <p className={`text-sm font-medium ${styles.text}`}>Status: {ticket.status}</p>
                 </div>
                 <div className="flex flex-col items-end space-y-2 w-full sm:w-auto">
                     <div className="text-2xl font-mono text-indigo-400 tracking-wider">
-                        <Clock size={22} className="inline mr-2" />{formatTime(currentElapsedTime)}
+                        <Clock size={22} className="inline mr-2" />{formatTime(currentElapsedTime || 0)}
                     </div>
                     <div className="flex space-x-2">
                         {ticket.status !== 'Concluído' && (
@@ -593,53 +494,57 @@ const ReportsView = ({ userId, tickets }) => { /* ... sem alterações ... */
         setReportData(null); 
         
         let filteredTickets = [];
-        const date = new Date(selectedDate + "T00:00:00"); 
+        const localSelectedDate = new Date(selectedDate + "T00:00:00Z"); // Use Z for UTC to avoid timezone shifts from just date string
 
         if (reportType === 'daily') {
-            const dayStart = Timestamp.fromDate(date);
-            const dayEnd = Timestamp.fromDate(new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999));
+            const dayStart = new Date(localSelectedDate);
+            dayStart.setHours(0, 0, 0, 0);
+            const dayEnd = new Date(localSelectedDate);
+            dayEnd.setHours(23, 59, 59, 999);
             
             filteredTickets = tickets.filter(t => {
-                const lastUpdated = t.lastUpdatedAt?.toDate() || t.creationTime?.toDate();
-                return lastUpdated >= dayStart.toDate() && lastUpdated <= dayEnd.toDate();
+                const lastUpdated = t.last_updated_at ? new Date(t.last_updated_at) : (t.creation_time ? new Date(t.creation_time) : null);
+                return lastUpdated && lastUpdated >= dayStart && lastUpdated <= dayEnd;
             });
+
             const dailySummary = filteredTickets.map(ticket => {
-                let timeOnDay = 0;
+                let timeOnDay = 0; // This logic might need more complex calculation if tickets span multiple days
                 let actionsOnDay = [];
                 (ticket.log || []).forEach(logEntry => {
-                    if (logEntry.timestamp.toDate().toDateString() === date.toDateString()) {
-                        actionsOnDay.push(`${formatDateTime(logEntry.timestamp)}: ${logEntry.action} ${logEntry.reason ? '('+logEntry.reason+')':''}`);
+                    const logDate = new Date(logEntry.timestamp);
+                    if (logDate.toDateString() === localSelectedDate.toDateString()) {
+                        actionsOnDay.push(`${formatDateTime(logDate)}: ${logEntry.action} ${logEntry.reason ? '('+logEntry.reason+')':''}`);
                     }
                 });
-                if (actionsOnDay.length > 0) timeOnDay = ticket.elapsedTime;
+                // Simplified: if any action on day, report total elapsed time. More accurate would be to sum time spent *only* on that day.
+                if (actionsOnDay.length > 0) timeOnDay = ticket.elapsed_time; 
 
                 return {
                     id: ticket.id,
                     subject: ticket.subject,
-                    timeSpentDisplay: formatTime(timeOnDay), 
+                    timeSpentDisplay: formatTime(timeOnDay || 0), 
                     actions: actionsOnDay,
                 };
             }).filter(t => t.actions.length > 0);
-            setReportData({ type: 'daily', date: formatDate(date), summary: dailySummary });
+            setReportData({ type: 'daily', date: formatDate(localSelectedDate), summary: dailySummary });
 
         } else if (reportType === 'weekly') {
-            const weekStart = new Date(date);
-            weekStart.setDate(date.getDate() - date.getDay()); 
+            const weekStart = new Date(localSelectedDate);
+            weekStart.setDate(localSelectedDate.getDate() - localSelectedDate.getDay() + (localSelectedDate.getDay() === 0 ? -6 : 1)); // Assuming week starts on Monday
+            weekStart.setHours(0, 0, 0, 0);
+            
             const weekEnd = new Date(weekStart);
             weekEnd.setDate(weekStart.getDate() + 6);
-            weekEnd.setHours(23,59,59,999);
-
-            const weekStartTS = Timestamp.fromDate(weekStart);
-            const weekEndTS = Timestamp.fromDate(weekEnd);
+            weekEnd.setHours(23, 59, 59, 999);
 
             filteredTickets = tickets.filter(t => {
-                const lastUpdated = t.lastUpdatedAt?.toDate() || t.creationTime?.toDate();
-                return lastUpdated >= weekStartTS.toDate() && lastUpdated <= weekEndTS.toDate();
+                const lastUpdated = t.last_updated_at ? new Date(t.last_updated_at) : (t.creation_time ? new Date(t.creation_time) : null);
+                return lastUpdated && lastUpdated >= weekStart && lastUpdated <= weekEnd;
             });
             const weeklySummary = filteredTickets.map(ticket => ({
                 id: ticket.id,
                 subject: ticket.subject,
-                totalTime: formatTime(ticket.elapsedTime), 
+                totalTime: formatTime(ticket.elapsed_time || 0), 
                 status: ticket.status,
             }));
 
@@ -731,26 +636,14 @@ function App() {
     const [editingTicket, setEditingTicket] = useState(null); 
     const [ticketFilter, setTicketFilter] = useState('abertos');
 
-    // Autenticação Firebase
+    // Simplified Authentication
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                setUserId(user.uid);
-            } else {
-                try {
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                         await signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-                } catch (error) { console.error("Error during sign-in:", error); setUserId(null); }
-            }
-            setIsAuthReady(true);
-        });
-        return () => unsubscribe();
+        // In a real app, this would involve a login screen or other auth mechanism
+        setUserId('local-dev-user'); // Fixed user ID
+        setIsAuthReady(true);
     }, []);
     
-    // Listener de Tickets usando o serviço
+    // Listener de Tickets usando o serviço (PostgreSQL)
     useEffect(() => {
         if (!isAuthReady || !userId) {
             setTickets([]); setActiveTicketId(null); setIsLoading(false);
@@ -774,11 +667,10 @@ function App() {
     }, [isAuthReady, userId, ticketRepository]);
 
 
-    // Lógica de Negócio / Casos de Uso (ainda dentro do App, mas usando o serviço)
-    // Em uma arquitetura mais completa, seriam UseCase classes/funções separadas.
+    // Lógica de Negócio / Casos de Uso
     const addLogEntryToTicketObject = (ticketLog, action, reason = null, checklistState = null) => {
         const newLogEntry = {
-            timestamp: Timestamp.now(),
+            timestamp: new Date(), // Use JS Date
             action: action,
             ...(reason && { reason: reason }),
             ...(checklistState && { checklist: checklistState })
@@ -790,38 +682,46 @@ function App() {
     const handleToggleTimer = useCallback(async (ticketIdToToggle, currentStatus, reason = null, checklist = null, isCompleting = false) => {
         if (!userId) return;
         
-        const currentTicketData = await ticketRepository.getTicket(userId, ticketIdToToggle);
-        if (!currentTicketData) return;
+        const currentTicketData = await ticketRepository.getTicket(userId, String(ticketIdToToggle)); // Ensure ID is string if needed
+        if (!currentTicketData) {
+            console.error("Ticket not found for toggling:", ticketIdToToggle);
+            return;
+        }
 
         let updateData = {};
         let newLog = currentTicketData.log || [];
 
-        if (!(currentTicketData.isActive && currentTicketData.status === 'Em Progresso')) { // Start/Resume
+        // Field names should match the database/service layer expectations
+        if (!(currentTicketData.is_active && currentTicketData.status === 'Em Progresso')) { // Start/Resume
             if (activeTicketId && activeTicketId !== ticketIdToToggle) {
-                const activeTicketRunningData = await ticketRepository.getTicket(userId, activeTicketId);
-                if (activeTicketRunningData && activeTicketRunningData.status === 'Em Progresso' && activeTicketRunningData.currentTimerStartTime) {
-                    const activeSessionSeconds = Timestamp.now().seconds - activeTicketRunningData.currentTimerStartTime.seconds;
-                    await ticketRepository.updateTicket(userId, activeTicketId, {
-                        elapsedTime: activeTicketRunningData.elapsedTime + activeSessionSeconds,
-                        isActive: false,
+                const activeTicketRunningData = await ticketRepository.getTicket(userId, String(activeTicketId));
+                if (activeTicketRunningData && activeTicketRunningData.status === 'Em Progresso' && activeTicketRunningData.current_timer_start_time) {
+                    const activeStartTime = activeTicketRunningData.current_timer_start_time instanceof Date ? activeTicketRunningData.current_timer_start_time : new Date(activeTicketRunningData.current_timer_start_time);
+                    const activeSessionSeconds = Math.floor((new Date().getTime() - activeStartTime.getTime()) / 1000);
+                    
+                    await ticketRepository.updateTicket(userId, String(activeTicketId), {
+                        elapsed_time: (activeTicketRunningData.elapsed_time || 0) + activeSessionSeconds,
+                        is_active: false,
                         status: 'Pausado',
-                        currentTimerStartTime: null,
+                        current_timer_start_time: null,
                         log: addLogEntryToTicketObject(activeTicketRunningData.log, 'Pausado automaticamente (outra tarefa iniciada)'),
                     });
                 }
             }
             updateData = {
                 status: 'Em Progresso',
-                isActive: true,
-                currentTimerStartTime: Timestamp.now(),
+                is_active: true,
+                current_timer_start_time: new Date(), // JS Date
                 log: addLogEntryToTicketObject(newLog, currentTicketData.status === 'Pausado' ? 'Tarefa Retomada' : 'Tarefa Iniciada'),
             };
         } else { // Pause/Stop/Complete
-            const sessionSeconds = currentTicketData.currentTimerStartTime ? (Timestamp.now().seconds - currentTicketData.currentTimerStartTime.seconds) : 0;
+            const startTime = currentTicketData.current_timer_start_time instanceof Date ? currentTicketData.current_timer_start_time : new Date(currentTicketData.current_timer_start_time);
+            const sessionSeconds = currentTicketData.current_timer_start_time ? Math.floor((new Date().getTime() - startTime.getTime()) / 1000) : 0;
+            
             updateData = {
-                elapsedTime: currentTicketData.elapsedTime + sessionSeconds,
-                isActive: false,
-                currentTimerStartTime: null,
+                elapsed_time: (currentTicketData.elapsed_time || 0) + sessionSeconds,
+                is_active: false,
+                current_timer_start_time: null,
                 checklist: checklist || currentTicketData.checklist,
             };
             if (isCompleting) {
@@ -834,7 +734,7 @@ function App() {
         }
         
         try {
-            await ticketRepository.updateTicket(userId, ticketIdToToggle, updateData);
+            await ticketRepository.updateTicket(userId, String(ticketIdToToggle), updateData);
         } catch (error) {
             console.error("Error toggling timer:", error);
         }
@@ -843,7 +743,7 @@ function App() {
     const handleDeleteTicket = async (ticketId) => {
         if (!userId) return;
         try {
-            await ticketRepository.deleteTicket(userId, ticketId);
+            await ticketRepository.deleteTicket(userId, String(ticketId)); // Ensure ID is string
         } catch (error) {
             console.error("Error deleting ticket:", error);
         }
@@ -867,17 +767,16 @@ function App() {
             if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
                 return priorityOrder[a.priority] - priorityOrder[b.priority];
             }
-            const timeA = a.lastUpdatedAt || a.creationTime || a.createdAt;
-            const timeB = b.lastUpdatedAt || b.creationTime || b.createdAt;
+            // Use DB field names and ensure Date objects
+            const timeA = a.last_updated_at || a.creation_time || a.created_at;
+            const timeB = b.last_updated_at || b.creation_time || b.created_at;
 
-            if (timeA && timeB) { // Ambos têm timestamps válidos
-                 // Assegura que são objetos Date para comparação
-                const dateA = timeA.toDate ? timeA.toDate() : new Date(timeA);
-                const dateB = timeB.toDate ? timeB.toDate() : new Date(timeB);
-                return dateB - dateA; // Mais recente primeiro
-            }
-            if (timeA) return -1; // a tem data, b não
-            if (timeB) return 1;  // b tem data, a não
+            const dateA = timeA ? (timeA instanceof Date ? timeA : new Date(timeA)) : null;
+            const dateB = timeB ? (timeB instanceof Date ? timeB : new Date(timeB)) : null;
+
+            if (dateA && dateB) return dateB.getTime() - dateA.getTime(); // Mais recente primeiro
+            if (dateA) return -1; 
+            if (dateB) return 1;  
             return 0;
         });
         
@@ -894,18 +793,19 @@ function App() {
     const [headerTime, setHeaderTime] = useState(0);
     useEffect(() => {
         let intervalId;
-        if (activeTicketDetails && activeTicketDetails.status === 'Em Progresso' && activeTicketDetails.currentTimerStartTime) {
-            const update = () => {
-                 const now = Timestamp.now();
-                 const startTime = activeTicketDetails.currentTimerStartTime;
-                 // Verifica se startTime é um Timestamp válido antes de acessar .seconds
-                 const sessionSeconds = startTime && startTime.seconds ? now.seconds - startTime.seconds : 0;
-                 setHeaderTime(activeTicketDetails.elapsedTime + sessionSeconds);
+        if (activeTicketDetails && activeTicketDetails.status === 'Em Progresso' && activeTicketDetails.current_timer_start_time) {
+            const updateHeaderTime = () => {
+                 const now = new Date();
+                 const startTime = activeTicketDetails.current_timer_start_time instanceof Date 
+                                 ? activeTicketDetails.current_timer_start_time 
+                                 : new Date(activeTicketDetails.current_timer_start_time);
+                 const sessionSeconds = Math.floor((now.getTime() - startTime.getTime()) / 1000);
+                 setHeaderTime((activeTicketDetails.elapsed_time || 0) + sessionSeconds);
             };
-            update(); 
-            intervalId = setInterval(update, 1000);
+            updateHeaderTime(); 
+            intervalId = setInterval(updateHeaderTime, 1000);
         } else if (activeTicketDetails) {
-            setHeaderTime(activeTicketDetails.elapsedTime);
+            setHeaderTime(activeTicketDetails.elapsed_time || 0);
         } else {
             setHeaderTime(0);
         }
@@ -913,22 +813,14 @@ function App() {
     }, [activeTicketDetails]);
 
     // JSX da Aplicação (Header, Main, Footer) - sem alterações visuais significativas
-    if (!isAuthReady) { /* ... */ 
-        return <div className="flex items-center justify-center min-h-screen bg-slate-900"><div className="text-xl font-semibold text-gray-300">Autenticando...</div></div>;
+    if (!isAuthReady) { 
+        return <div className="flex items-center justify-center min-h-screen bg-slate-900"><div className="text-xl font-semibold text-gray-300">Carregando aplicação...</div></div>;
     }
-    if (!userId) { /* ... */ 
-         return <div className="flex items-center justify-center min-h-screen bg-slate-900 p-4 text-center">
-            <div className="bg-slate-800 p-8 rounded-lg shadow-xl">
-                <AlertTriangle size={48} className="text-red-400 mx-auto mb-4" />
-                <h2 className="text-2xl font-semibold text-gray-100 mb-2">Falha na Autenticação</h2>
-                <p className="text-gray-400">Não foi possível autenticar o usuário. Por favor, recarregue a página ou contate o suporte se o problema persistir.</p>
-                <p className="text-xs text-gray-500 mt-4">ID da App: {appId}</p>
-            </div>
-        </div>;
-    }
+    // userId is now always set in simplified auth, so no specific !userId check needed here,
+    // unless we want to show a different state before the fixed ID is set.
 
     return (
-        <TicketRepositoryContext.Provider value={firebaseTicketService}> {/* Fornece o serviço */}
+        <TicketRepositoryContext.Provider value={postgresTicketService}> {/* Fornece o serviço PostgreSQL */}
             <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-700 text-gray-100 font-sans">
                 <header className="bg-slate-800/50 backdrop-blur-md shadow-lg p-4 sticky top-0 z-40">
                     <div className="container mx-auto flex flex-col sm:flex-row justify-between items-center">
@@ -954,7 +846,7 @@ function App() {
                     <div className="bg-indigo-600 text-white p-3 shadow-md sticky top-[72px] sm:top-[68px] z-30">
                         <div className="container mx-auto text-center">
                             <p className="font-semibold text-sm sm:text-base">Trabalhando em: <span className="font-bold">{activeTicketDetails.subject}</span></p>
-                            <p className="text-xl sm:text-2xl font-mono tracking-wider">{formatTime(headerTime)}</p>
+                            <p className="text-xl sm:text-2xl font-mono tracking-wider">{formatTime(headerTime || 0)}</p>
                         </div>
                     </div>
                 )}
@@ -1000,7 +892,7 @@ function App() {
                                 <div className="space-y-4">
                                     {filteredTickets.map(ticket => (
                                         <TicketItem 
-                                            key={ticket.id} 
+                                            key={ticket.id} // Assuming ID from DB is unique and suitable as key
                                             ticket={ticket} 
                                             onToggleTimer={handleToggleTimer}
                                             onDeleteTicket={handleDeleteTicket}
@@ -1017,7 +909,7 @@ function App() {
                     )}
                 </main>
                 <footer className="text-center py-6 text-sm text-gray-500 border-t border-slate-700 mt-10">
-                    <p>&copy; {new Date().getFullYear()} Gerenciador de Tempo. App ID: {appId}</p>
+                    <p>&copy; {new Date().getFullYear()} Gerenciador de Tempo. User: {userId}</p>
                 </footer>
             </div>
         </TicketRepositoryContext.Provider>
@@ -1025,4 +917,5 @@ function App() {
 }
 
 export default App;
+
 
