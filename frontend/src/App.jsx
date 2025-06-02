@@ -107,6 +107,48 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message }) => {
     );
 };
 
+const ToastMessage = ({ message, type, onDismiss }) => {
+    if (!message) return null;
+
+    const baseStyle = "fixed top-5 right-5 p-4 rounded-lg shadow-xl text-white transition-all duration-500 ease-in-out opacity-0 animate-fadeInOut"; // Added animation classes
+    const typeStyles = {
+        success: "bg-green-500",
+        error: "bg-red-500",
+        info: "bg-blue-500"
+    };
+    
+    // Simple keyframe animation for fadeInOut
+    // For a real app, you might use a CSS file or a more robust animation library
+    const animationStyle = `
+        @keyframes fadeInOutAnimation {
+            0% { opacity: 0; transform: translateY(-20px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-20px); }
+        }
+        .animate-fadeInOut {
+            animation: fadeInOutAnimation 3s forwards;
+        }
+    `;
+
+    return (
+        <>
+            <style>{animationStyle}</style>
+            <div className={`${baseStyle} ${typeStyles[type] || typeStyles.info} z-[100]`}> {/* Ensure high z-index */}
+                <span>{message}</span>
+                <button 
+                    onClick={onDismiss} 
+                    className="ml-4 text-xl font-semibold leading-none hover:text-gray-200 focus:outline-none"
+                    aria-label="Dismiss message"
+                >
+                    &times;
+                </button>
+            </div>
+        </>
+    );
+};
+
+
 // Função utilitária para buscar clientes
 async function fetchClients() {
     const res = await fetch(`${API_BASE_URL}/clients`);
@@ -189,7 +231,7 @@ function ClientModal({ isOpen, onClose, onClientAdded }) {
     );
 }
 
-const TicketForm = ({ onTicketAdded, ticketToEdit, onTicketUpdated, onCancelEdit, clients, onOpenClientModal }) => { // Added clients and onOpenClientModal props
+const TicketForm = ({ onTicketAdded, ticketToEdit, onTicketUpdated, onCancelEdit, clients, onOpenClientModal, showToast }) => { // Added showToast prop
     const ticketRepository = useTicketRepository();
     const [ticketIdInput, setTicketIdInput] = useState('');
     const [subject, setSubject] = useState('');
@@ -253,21 +295,25 @@ const TicketForm = ({ onTicketAdded, ticketToEdit, onTicketUpdated, onCancelEdit
             if (ticketToEdit) {
                 await ticketRepository.updateTicket(ticketToEdit.id, ticketDataObject);
                 if (onTicketUpdated) onTicketUpdated();
-                setFormMessage({ text: "Ticket atualizado com sucesso!", type: "success" });
+                if (showToast) showToast("Ticket atualizado com sucesso!", "success");
+                setFormMessage({ text: '', type: '' }); // Clear form message on success
             } else {
                 await ticketRepository.addTicket(ticketDataObject);
                 if (onTicketAdded) onTicketAdded();
-                setFormMessage({ text: "Ticket adicionado com sucesso!", type: "success" });
+                if (showToast) showToast("Ticket adicionado com sucesso!", "success");
+                setFormMessage({ text: '', type: '' }); // Clear form message on success
             }
              if (!ticketToEdit || (ticketToEdit && onTicketAdded)) { // Reset form for new ticket or if specifically requested after update
-                 setTicketIdInput(''); setSubject(''); setSelectedClientId(''); // Reset clientId
-                 // setAccountName(''); // Removed
+                 setTicketIdInput(''); setSubject(''); setSelectedClientId(''); 
                  setPriority('Médio Impacto'); setDifficulty('Médio');
                  setCreationDate(new Date().toISOString().split('T')[0]);
+                 // setFormMessage({ text: '', type: '' }); // Already cleared above or will be by next render
             }
         } catch (error) {
             console.error("Erro ao salvar ticket:", error);
-            setFormMessage({ text: `Erro ao salvar ticket: ${error.message || 'Erro desconhecido'}`, type: "error" });
+            const errorMessage = `Erro ao salvar ticket: ${error.message || 'Erro desconhecido'}`;
+            setFormMessage({ text: errorMessage, type: "error" });
+            if (showToast) showToast(errorMessage, "error");
         }
     };
     
@@ -498,6 +544,17 @@ function App() {
     const [filterClient, setFilterClient] = useState('');
     const [clients, setClients] = useState([]); // This state will hold all clients
     const [isClientModalOpen, setIsClientModalOpen] = useState(false); // State for global ClientModal
+    const [toast, setToast] = useState({ message: '', type: '', key: 0 }); // Toast state
+
+    const showToast = (message, type = 'info') => {
+        const newKey = Date.now();
+        setToast({ message, type, key: newKey });
+        setTimeout(() => {
+            // Only clear the toast if it's the one we just set.
+            // This prevents an older timeout from clearing a newer toast.
+            setToast(prev => (prev.key === newKey ? { message: '', type: '', key: 0 } : prev));
+        }, 3000); // Auto-dismiss after 3 seconds
+    };
 
     const fetchTickets = useCallback(async () => {
         setIsLoading(true); setError(null);
@@ -528,7 +585,17 @@ function App() {
                 const activeTicketRunningData = tickets.find(t => t.id === activeTicketId);
                 if (activeTicketRunningData && activeTicketRunningData.status === 'Em Progresso' && activeTicketRunningData.currentTimerStartTime) {
                     const activeSessionSeconds = Math.floor((Date.now() - new Date(activeTicketRunningData.currentTimerStartTime).getTime()) / 1000);
-                    try { await ticketRepository.updateTicket(activeTicketId, { ...activeTicketRunningData, elapsedTime: (activeTicketRunningData.elapsedTime || 0) + activeSessionSeconds, isActive: false, status: 'Pausado', currentTimerStartTime: null, log: addLogEntryToTicketObject(activeTicketRunningData.log, 'Pausado automaticamente (outra tarefa iniciada)') }); }
+                    const newLogForOldTask = `Pausado automaticamente para iniciar: '${currentTicketData.subject}'`;
+                    try { 
+                        await ticketRepository.updateTicket(activeTicketId, { 
+                            ...activeTicketRunningData, 
+                            elapsedTime: (activeTicketRunningData.elapsedTime || 0) + activeSessionSeconds, 
+                            isActive: false, 
+                            status: 'Pausado', 
+                            currentTimerStartTime: null, 
+                            log: addLogEntryToTicketObject(activeTicketRunningData.log, newLogForOldTask) 
+                        }); 
+                    }
                     catch (err) { console.error("Erro ao pausar ticket ativo:", err); }
                 }
             }
@@ -596,6 +663,7 @@ function App() {
     return (
         <TicketRepositoryContext.Provider value={apiTicketService}>
             <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-700 text-gray-100 font-sans">
+                {toast.message && <ToastMessage key={toast.key} message={toast.message} type={toast.type} onDismiss={() => setToast({ message: '', type: '', key: 0 })} />}
                 <header className="bg-slate-800/50 backdrop-blur-md shadow-lg p-4 sticky top-0 z-40">
                     <div className="container mx-auto flex flex-col sm:flex-row justify-between items-center">
                         <div className="flex items-center space-x-2 mb-2 sm:mb-0"><BarChart3 size={32} className="text-indigo-400" /><h1 className="text-2xl font-bold tracking-tight text-white">Gerenciador de Tempo Local</h1></div>
@@ -704,8 +772,9 @@ function App() {
                                 ticketToEdit={editingTicket} 
                                 onTicketUpdated={handleTicketAddedOrUpdated} 
                                 onCancelEdit={handleTicketFormClose}
-                                clients={clients} // Pass clients list
-                                onOpenClientModal={() => setIsClientModalOpen(true)} // Pass handler to open global modal
+                                clients={clients} 
+                                onOpenClientModal={() => setIsClientModalOpen(true)}
+                                showToast={showToast} // Pass showToast to TicketForm
                             />
                         )}
                         {isLoading && <div className="text-center py-10 text-gray-300">Carregando tickets...</div>}
@@ -722,6 +791,7 @@ function App() {
                             setClients(newClients); // Update clients list in App
                         });
                         setIsClientModalOpen(false); 
+                        showToast("Cliente cadastrado com sucesso!", "success");
                     }} 
                 />
                 <footer className="text-center py-6 text-sm text-gray-500 border-t border-slate-700 mt-10"><p>&copy; {new Date().getFullYear()} Gerenciador de Tempo Local.</p></footer>
