@@ -231,7 +231,16 @@ function ClientModal({ isOpen, onClose, onClientAdded }) {
     );
 }
 
-const TicketForm = ({ onTicketAdded, ticketToEdit, onTicketUpdated, onCancelEdit, clients, onOpenClientModal, showToast }) => { // Added showToast prop
+// --- Renamed TicketForm to TicketModal and adjusted props & logic ---
+const TicketModal = ({ 
+    isOpen, 
+    onClose, 
+    ticketToEdit, 
+    onTicketAddedOrUpdated, 
+    clients, 
+    showToast,
+    onOpenClientModal 
+}) => {
     const ticketRepository = useTicketRepository();
     const [ticketIdInput, setTicketIdInput] = useState('');
     const [subject, setSubject] = useState('');
@@ -243,22 +252,25 @@ const TicketForm = ({ onTicketAdded, ticketToEdit, onTicketUpdated, onCancelEdit
     // Removed local clients state and showClientModal state
 
     useEffect(() => {
-        if (ticketToEdit) {
-            setTicketIdInput(ticketToEdit.ticketIdInput || '');
-            setSubject(ticketToEdit.subject || '');
-            setSelectedClientId(ticketToEdit.clientId || '');
-            setPriority(ticketToEdit.priority || 'Médio Impacto');
-            setDifficulty(ticketToEdit.difficulty || 'Médio');
-            setCreationDate(ticketToEdit.creationTime ? new Date(ticketToEdit.creationTime).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
-        } else {
-            setTicketIdInput(''); setSubject(''); setSelectedClientId('');
-            setPriority('Médio Impacto'); setDifficulty('Médio');
-            setCreationDate(new Date().toISOString().split('T')[0]);
+        if (isOpen) { // Only run when modal is open
+            if (ticketToEdit) {
+                setTicketIdInput(ticketToEdit.ticketIdInput || '');
+                setSubject(ticketToEdit.subject || '');
+                setSelectedClientId(ticketToEdit.clientId || '');
+                setPriority(ticketToEdit.priority || 'Médio Impacto');
+                setDifficulty(ticketToEdit.difficulty || 'Médio');
+                setCreationDate(ticketToEdit.creationTime ? new Date(ticketToEdit.creationTime).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+            } else {
+                setTicketIdInput(''); 
+                setSubject(''); 
+                setSelectedClientId('');
+                setPriority('Médio Impacto'); 
+                setDifficulty('Médio');
+                setCreationDate(new Date().toISOString().split('T')[0]);
+            }
+            setFormMessage({ text: '', type: '' }); // Reset form message each time it opens
         }
-        setFormMessage({ text: '', type: '' });
-    }, [ticketToEdit]);
-
-    // Removed useEffect that fetched clients locally based on showClientModal
+    }, [ticketToEdit, isOpen]); // Added isOpen to dependency array
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -294,20 +306,23 @@ const TicketForm = ({ onTicketAdded, ticketToEdit, onTicketUpdated, onCancelEdit
         try {
             if (ticketToEdit) {
                 await ticketRepository.updateTicket(ticketToEdit.id, ticketDataObject);
-                if (onTicketUpdated) onTicketUpdated();
                 if (showToast) showToast("Ticket atualizado com sucesso!", "success");
-                setFormMessage({ text: '', type: '' }); // Clear form message on success
+                // setFormMessage({ text: '', type: '' }); // Clear form message on success // Not needed if modal closes
             } else {
                 await ticketRepository.addTicket(ticketDataObject);
-                if (onTicketAdded) onTicketAdded();
                 if (showToast) showToast("Ticket adicionado com sucesso!", "success");
-                setFormMessage({ text: '', type: '' }); // Clear form message on success
+                // setFormMessage({ text: '', type: '' }); // Clear form message on success // Not needed if modal closes
             }
-             if (!ticketToEdit || (ticketToEdit && onTicketAdded)) { // Reset form for new ticket or if specifically requested after update
+            // Call the callback passed from App.jsx to refresh tickets and potentially close form
+            if(onTicketAddedOrUpdated) onTicketAddedOrUpdated();
+            onClose(); // Close modal on success
+
+            // Reset form fields for next time it opens (if it's for a new ticket)
+            // This is now primarily handled by useEffect based on isOpen and ticketToEdit
+            if (!ticketToEdit) {
                  setTicketIdInput(''); setSubject(''); setSelectedClientId(''); 
                  setPriority('Médio Impacto'); setDifficulty('Médio');
                  setCreationDate(new Date().toISOString().split('T')[0]);
-                 // setFormMessage({ text: '', type: '' }); // Already cleared above or will be by next render
             }
         } catch (error) {
             console.error("Erro ao salvar ticket:", error);
@@ -322,12 +337,16 @@ const TicketForm = ({ onTicketAdded, ticketToEdit, onTicketUpdated, onCancelEdit
     //     setAccountName(e.target.value);
     // };
 
+    if (!isOpen) return null;
+
     return (
-            <form onSubmit={handleSubmit} className="p-6 bg-slate-800 rounded-lg shadow-xl mb-8 space-y-6"> {/* Increased padding and bottom margin, space-y-6 */}
-            <h3 className="text-xl font-semibold text-gray-100 mb-4">{ticketToEdit ? 'Editar Ticket' : 'Adicionar Novo Ticket'}</h3> {/* Increased font size and bottom margin */}
-            {formMessage.text && <p className={`text-sm mb-4 p-3 rounded-md ${formMessage.type === 'error' ? 'bg-red-500/30 text-red-200 border border-red-400/50' : 'bg-green-500/30 text-green-200 border border-green-400/50'}`}>{formMessage.text}</p>} {/* Enhanced message styling */}
+        <Modal isOpen={isOpen} onClose={onClose} title={ticketToEdit ? 'Editar Ticket' : 'Adicionar Novo Ticket'} size="max-w-2xl">
+            <form onSubmit={handleSubmit} className="p-1 bg-slate-800 rounded-lg shadow space-y-6 max-h-[80vh] overflow-y-auto no-scrollbar"> {/* Adjusted padding, no margin-bottom, scroll */}
+            {/* Removed h3 title as Modal already has one */}
+            {formMessage.text && <p className={`text-sm my-3 p-3 rounded-md ${formMessage.type === 'error' ? 'bg-red-500/30 text-red-200 border border-red-400/50' : 'bg-green-500/30 text-green-200 border border-green-400/50'}`}>{formMessage.text}</p>} {/* Adjusted margin */}
             
-            <div>
+            <div className="p-4 space-y-6"> {/* Added inner padding for form elements */}
+                <div>
                 <label htmlFor="clientSelect" className="block text-sm font-medium text-gray-300 mb-1">Cliente *</label> {/* Added mb-1 */}
                 <div className="flex items-center gap-2 mt-1"> {/* Ensure items-center for vertical alignment */}
                     <select
@@ -363,14 +382,16 @@ const TicketForm = ({ onTicketAdded, ticketToEdit, onTicketUpdated, onCancelEdit
                 <div><label htmlFor="difficulty" className="block text-sm font-medium text-gray-300 mb-1">Dificuldade</label><select id="difficulty" value={difficulty} onChange={(e) => setDifficulty(e.target.value)} disabled={!selectedClientId} className="mt-1 block w-full px-3 py-2.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900 disabled:bg-gray-200 disabled:text-gray-500"><option value="Fácil">Fácil</option><option value="Médio">Médio</option><option value="Difícil">Difícil</option></select></div>
             </div>
             <div><label htmlFor="creationDate" className="block text-sm font-medium text-gray-300 mb-1">Data de Criação</label><input type="date" id="creationDate" value={creationDate} onChange={(e) => setCreationDate(e.target.value)} disabled={!selectedClientId} className="mt-1 block w-full px-3 py-2.5 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900 disabled:bg-gray-200 disabled:text-gray-500" /></div>
-            <div className="flex justify-end space-x-3 pt-4">
-                 {ticketToEdit && (<button type="button" onClick={onCancelEdit} className="px-4 py-2 text-sm font-medium text-gray-300 bg-slate-700 rounded-md border border-slate-600 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:ring-offset-slate-800">Cancelar Edição</button>)}
-                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:ring-offset-slate-800 flex items-center space-x-2"><Save size={18} /><span>{ticketToEdit ? 'Salvar Alterações' : 'Adicionar Ticket'}</span></button>
+            <div className="flex justify-end space-x-3 pt-4"> {/* Submit and Cancel buttons for the modal form */}
+                 <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md border border-gray-300 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Cancelar</button>
+                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 flex items-center space-x-2"><Save size={18} /><span>{ticketToEdit ? 'Salvar Alterações' : 'Adicionar Ticket'}</span></button>
             </div>
-            {/* ClientModal instance removed from here */}
+            </div> {/* End of inner padding div */}
         </form>
+        </Modal>
     );
 };
+// --- End of TicketModal (formerly TicketForm) ---
 
 const StopTimerModal = ({ isOpen, onClose, onStopConfirm, ticket }) => {
     const [reason, setReason] = useState('');
@@ -575,7 +596,7 @@ function App() {
     const [activeTicketId, setActiveTicketId] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [showTicketForm, setShowTicketForm] = useState(false);
+    const [isTicketModalOpen, setIsTicketModalOpen] = useState(false); // Renamed from showTicketForm
     const [currentView, setCurrentView] = useState('tickets');
     const [editingTicket, setEditingTicket] = useState(null); 
     const [ticketFilter, setTicketFilter] = useState('abertos');
@@ -657,9 +678,19 @@ function App() {
         try { await ticketRepository.deleteTicket(ticketId); fetchTickets(); }
         catch (err) { console.error("Error deleting ticket:", err); setError(err.message || "Erro ao deletar ticket."); }
     };
-    const handleTicketAddedOrUpdated = () => { setShowTicketForm(false); setEditingTicket(null); fetchTickets(); };
-    const handleEditTicket = (ticket) => { setEditingTicket(ticket); setShowTicketForm(true); };
-    const handleTicketFormClose = () => { setShowTicketForm(false); setEditingTicket(null); };
+    const handleTicketAddedOrUpdated = () => { // This will be for onTicketModalSuccess
+        fetchTickets();
+        setIsTicketModalOpen(false); 
+        setEditingTicket(null); 
+    };
+    const handleEditTicket = (ticket) => { 
+        setEditingTicket(ticket); 
+        setIsTicketModalOpen(true); // Use new state
+    };
+    const handleCloseTicketModal = () => { // New handler for modal's onClose
+        setIsTicketModalOpen(false); 
+        setEditingTicket(null); 
+    };
 
     const filteredTickets = useMemo(() => {
         let sortedTickets = [...tickets];
@@ -745,11 +776,14 @@ function App() {
                                     <span>Cadastrar Cliente</span>
                                 </button>
                                 <button 
-                                    onClick={() => { setEditingTicket(null); setShowTicketForm(prev => !prev);}} 
+                                    onClick={() => { 
+                                        setEditingTicket(null); 
+                                        setIsTicketModalOpen(true); // Open modal for new ticket
+                                    }} 
                                     className="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-150 ease-in-out flex items-center space-x-2 w-full sm:w-auto justify-center"
                                 >
                                     <PlusCircle size={20} />
-                                    <span>{showTicketForm && !editingTicket ? 'Fechar Formulário' : (editingTicket ? 'Fechar Edição' : 'Adicionar Ticket')}</span>
+                                    <span>Adicionar Ticket</span> {/* Static text */}
                                 </button>
                             </div>
                         </div>
@@ -819,29 +853,28 @@ function App() {
                                 </div>
                             </div>
                         )}
-                        {(showTicketForm || editingTicket) && (
-                            <TicketForm 
-                                onTicketAdded={handleTicketAddedOrUpdated} 
-                                ticketToEdit={editingTicket} 
-                                onTicketUpdated={handleTicketAddedOrUpdated} 
-                                onCancelEdit={handleTicketFormClose}
-                                clients={clients} 
-                                onOpenClientModal={() => setIsClientModalOpen(true)}
-                                showToast={showToast} // Pass showToast to TicketForm
-                            />
-                        )}
+                        {/* Conditional rendering of TicketModal removed from here */}
                         {isLoading && <div className="text-center py-10 text-gray-300">Carregando tickets...</div>}
-                        {!isLoading && !error && filteredTickets.length === 0 && !showTicketForm && (<div className="text-center py-10 bg-slate-800 rounded-lg shadow-md"><p className="text-xl text-gray-400">Nenhum ticket encontrado para o filtro atual.</p>{ticketFilter === 'abertos' && <p className="text-gray-500">Adicione um novo ticket para começar ou altere o filtro.</p>}</div>)}
+                        {!isLoading && !error && filteredTickets.length === 0 && !isTicketModalOpen && (<div className="text-center py-10 bg-slate-800 rounded-lg shadow-md"><p className="text-xl text-gray-400">Nenhum ticket encontrado para o filtro atual.</p>{ticketFilter === 'abertos' && <p className="text-gray-500">Adicione um novo ticket para começar ou altere o filtro.</p>}</div>)}
                         {!isLoading && !error && filteredTickets.length > 0 && (<div className="space-y-4">{filteredTickets.map(ticket => (<TicketItem key={ticket.id} ticket={ticket} onToggleTimer={handleToggleTimer} onDeleteTicket={handleDeleteTicket} onEditTicket={handleEditTicket} activeTicketId={activeTicketId}/>))}</div>)}
                     </>)}
                     {currentView === 'reports' && (<ReportsView tickets={tickets} />)}
                 </main>
+                <TicketModal
+                    isOpen={isTicketModalOpen}
+                    onClose={handleCloseTicketModal}
+                    ticketToEdit={editingTicket}
+                    onTicketAddedOrUpdated={handleTicketAddedOrUpdated} // Renamed from handleTicketModalSuccess for clarity
+                    clients={clients}
+                    showToast={showToast}
+                    onOpenClientModal={() => setIsClientModalOpen(true)}
+                />
                 <ClientModal 
                     isOpen={isClientModalOpen} 
                     onClose={() => setIsClientModalOpen(false)} 
                     onClientAdded={() => { 
                         fetchClients().then(newClients => {
-                            setClients(newClients); // Update clients list in App
+                            setClients(newClients); 
                         });
                         setIsClientModalOpen(false); 
                         showToast("Cliente cadastrado com sucesso!", "success");
