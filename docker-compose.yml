@@ -1,34 +1,32 @@
+# docker-compose.yml
 version: '3.8'
 
 services:
-  app:
+  frontend:
     build:
-      context: .
+      context: ./frontend
       dockerfile: Dockerfile
+      args: # Passa a variável de ambiente para o build do Docker do frontend
+        REACT_APP_API_URL: http://localhost:3001/api 
+        # Nota: O frontend no browser do usuário acessará o backend via localhost:3001.
+        # Se você quisesse comunicação container-para-container (ex: Nginx fazendo proxy),
+        # usaria http://backend:3001/api aqui e ajustaria o Nginx.
     ports:
       - "3000:80"
-    environment:
-      NODE_ENV: production
-      PGHOST: db
-      PGUSER: timemanager_user
-      PGPASSWORD: timemanager_password
-      PGDATABASE: timemanager_db
-      PGPORT: 5432
     depends_on:
-      - db
+      - backend
+    # A variável de ambiente REACT_APP_API_URL é usada no build do Docker do frontend.
+    # Se precisar dela em runtime (improvável para URLs de API no frontend buildado),
+    # poderia ser definida aqui também, mas o build é o local correto para Create React App.
 
-  db:
+  backend:
     build:
-      context: ./database
+      context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_USER: timemanager_user
-      POSTGRES_PASSWORD: timemanager_password
-      POSTGRES_DB: timemanager_db
+      - "3001:3001"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-volumes:
-  postgres_data:
+      - ./backend/data:/app/data 
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
