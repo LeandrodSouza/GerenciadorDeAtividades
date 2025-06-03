@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
-import { Clock, Play, Pause, PlusCircle, UserPlus, CalendarDays, Trash2, Edit3, ListChecks, AlertTriangle, CheckCircle, XCircle, ChevronDown, ChevronUp, Save, Filter, FileText, BarChart3, RefreshCw, LayoutDashboard } from 'lucide-react';
+import { Clock, Play, Pause, PlusCircle, UserPlus, CalendarDays, Trash2, Edit3, ListChecks, AlertTriangle, CheckCircle, XCircle, ChevronDown, ChevronUp, Save, Filter, FileText, BarChart3, RefreshCw, LayoutDashboard, Users } from 'lucide-react'; // Added Users
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
@@ -131,6 +131,123 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message }) => {
                 <button onClick={onConfirm} className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600">Confirmar</button>
             </div>
         </Modal>
+    );
+};
+
+const ClientManagementView = () => {
+    const [clients, setClients] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [isClientModalOpen, setIsClientModalOpen] = useState(false);
+    // eslint-disable-next-line no-unused-vars
+    const [editingClient, setEditingClient] = useState(null); // Placeholder for future edit functionality
+
+    const fetchAndSetClients = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const clientData = await fetchClients(); // fetchClients is globally defined
+            setClients(clientData);
+            setError(null);
+        } catch (err) {
+            console.error("Erro ao buscar clientes:", err);
+            setError("Falha ao carregar clientes.");
+            setClients([]);
+        }
+        setIsLoading(false);
+    }, []);
+
+    useEffect(() => {
+        fetchAndSetClients();
+    }, [fetchAndSetClients]);
+
+    const handleClientAdded = () => {
+        fetchAndSetClients(); // Re-fetch clients after adding a new one
+        showToast("Cliente adicionado com sucesso!", "success"); // showToast should be passed or globally available
+    };
+
+    // Placeholder for a global showToast, ideally passed via props or context
+    const showToast = (message, type) => {
+        console.log(`Toast: ${message} (${type})`);
+        // In a real app, this would trigger a visual toast notification
+    };
+
+
+    // Placeholder actions - these would eventually open modals or forms
+    const handleEditClient = (client) => {
+        setEditingClient(client);
+        // setIsEditModalOpen(true); // Example for an edit modal
+        console.log("Editar cliente:", client);
+        showToast("Funcionalidade de edição de cliente ainda não implementada.", "info");
+    };
+
+    const handleDeleteClient = (clientId) => {
+        console.log("Excluir cliente:", clientId);
+        // Implement actual deletion logic here, then refetch or update state
+        // For now, just a placeholder:
+        // setClients(prevClients => prevClients.filter(c => c.id !== clientId));
+        showToast("Funcionalidade de exclusão de cliente ainda não implementada.", "info");
+    };
+
+
+    return (
+        <div className="bg-slate-800 p-6 rounded-lg shadow-xl">
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-semibold text-gray-100">Gerenciamento de Clientes</h2>
+                <button
+                    onClick={() => setIsClientModalOpen(true)}
+                    className="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-150 ease-in-out flex items-center space-x-2"
+                >
+                    <UserPlus size={20} />
+                    <span>Novo Cliente</span>
+                </button>
+            </div>
+
+            {isLoading && <p className="text-gray-300 text-center py-4">Carregando clientes...</p>}
+            {error && <p className="text-red-400 bg-red-900/30 p-3 rounded-md text-center">{error}</p>}
+
+            {!isLoading && !error && clients.length === 0 && (
+                <p className="text-gray-400 text-center py-4">Nenhum cliente cadastrado.</p>
+            )}
+
+            {!isLoading && !error && clients.length > 0 && (
+                <div className="overflow-x-auto rounded-lg shadow">
+                    <table className="min-w-full bg-slate-700 text-gray-200">
+                        <thead className="bg-slate-600">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Nome</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">ID</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-600">
+                            {clients.map(client => (
+                                <tr key={client.id} className="hover:bg-slate-600/50 transition-colors">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{client.name}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{client.id}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-right space-x-2">
+                                        <button onClick={() => handleEditClient(client)} className="text-indigo-400 hover:text-indigo-300" title="Editar Cliente">
+                                            <Edit3 size={18} />
+                                        </button>
+                                        <button onClick={() => handleDeleteClient(client.id)} className="text-red-400 hover:text-red-300" title="Excluir Cliente">
+                                            <Trash2 size={18} />
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+             {/* ClientModal for adding new clients */}
+             <ClientModal
+                isOpen={isClientModalOpen}
+                onClose={() => setIsClientModalOpen(false)}
+                onClientAdded={handleClientAdded}
+            />
+
+            {/* Placeholder for Edit Client Modal - to be implemented */}
+            {/* <EditClientModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} client={editingClient} onClientUpdated={handleClientUpdated} /> */}
+        </div>
     );
 };
 
