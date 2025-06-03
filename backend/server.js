@@ -13,7 +13,7 @@ app.use(express.json());
 // GET /api/tickets - Listar todos os tickets
 app.get("/api/tickets", (req, res) => {
     const sql = `
-        SELECT t.*, c.name as clientName 
+        SELECT t.*, c.name as clientName
         FROM tickets t
         LEFT JOIN clients c ON t.clientId = c.id
         ORDER BY t.createdAt DESC
@@ -43,7 +43,7 @@ app.get("/api/tickets", (req, res) => {
 // GET /api/tickets/:id - Obter um ticket específico
 app.get("/api/tickets/:id", (req, res) => {
     const sql = `
-        SELECT t.*, c.name as clientName 
+        SELECT t.*, c.name as clientName
         FROM tickets t
         LEFT JOIN clients c ON t.clientId = c.id
         WHERE t.id = ?
@@ -93,13 +93,13 @@ app.post("/api/tickets", (req, res) => {
     const nowISO = new Date().toISOString();
 
     const sql = `INSERT INTO tickets (
-        id, ticketIdInput, subject, priority, difficulty, 
+        id, ticketIdInput, subject, priority, difficulty,
         creationTime, status, elapsedTime, isActive, log, checklist, 
         currentTimerStartTime, lastUpdatedAt, createdAt, clientId
     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`; // 15 params, accountName removed
     
     const params = [
-        newId, ticketIdInput || `T-${Date.now().toString().slice(-6)}`, subject, 
+        newId, ticketIdInput || `T-${Date.now().toString().slice(-6)}`, subject,
         priority, difficulty, creationTime || nowISO, status, elapsedTime, 
         isActive ? 1 : 0, JSON.stringify(log), JSON.stringify(checklist),
         currentTimerStartTime, nowISO, nowISO, clientId // clientId added
@@ -121,12 +121,12 @@ app.post("/api/tickets", (req, res) => {
             const createdTicket = {
                 id: newId,
                 ticketIdInput: params[1], // ticketIdInput from params
-                subject, 
+                subject,
                 clientId, // Include clientId
                 accountName: clientRow ? clientRow.name : "Cliente não encontrado", // Add accountName from join/fetch
-                priority, difficulty, 
+                priority, difficulty,
                 creationTime: params[5], // creationTime from params
-                status, elapsedTime, isActive, log, checklist, 
+                status, elapsedTime, isActive, log, checklist,
                 currentTimerStartTime: params[11], // currentTimerStartTime from params
                 lastUpdatedAt: nowISO,
                 createdAt: nowISO
@@ -258,7 +258,7 @@ app.post('/api/clients', (req, res) => {
     }
     const upperCaseName = name.trim().toUpperCase(); // Transform to uppercase
     const id = require('uuid').v4();
-    
+
     // Check if client with the same uppercase name already exists
     db.get('SELECT * FROM clients WHERE name = ?', [upperCaseName], (err, row) => {
         if (err) {
