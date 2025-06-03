@@ -71,13 +71,34 @@ const formatTime = (totalSeconds = 0) => {
 };
 const formatDateFromISO = (isoString) => {
     if (!isoString) return 'N/A';
-    try { return new Date(isoString).toLocaleDateString('pt-BR', { timeZone: 'UTC' }); }
-    catch (e) { return 'Data inválida'; }
+    try { 
+        return new Date(isoString).toLocaleDateString('pt-BR', { 
+            timeZone: 'America/Sao_Paulo',
+            // year: 'numeric', month: '2-digit', day: '2-digit' // Optional: for DD/MM/YYYY
+        }); 
+    } catch (e) { 
+        console.error("Erro ao formatar data:", isoString, e);
+        return 'Data inválida'; 
+    }
 };
+
 const formatDateTimeFromISO = (isoString) => {
     if (!isoString) return 'N/A';
-    try { return new Date(isoString).toLocaleString('pt-BR', { timeZone: 'UTC' }); }
-    catch (e) { return 'Data/Hora inválida'; }
+    try { 
+        return new Date(isoString).toLocaleString('pt-BR', { 
+            timeZone: 'America/Sao_Paulo',
+            year: 'numeric', 
+            month: '2-digit', 
+            day: '2-digit',
+            hour: '2-digit', 
+            minute: '2-digit', 
+            // second: '2-digit', // Second is often too much detail for display
+            hour12: false 
+        }); 
+    } catch (e) { 
+        console.error("Erro ao formatar data/hora:", isoString, e);
+        return 'Data/Hora inválida'; 
+    }
 };
 
 const getPriorityClass = (priority) => { 
@@ -464,13 +485,13 @@ const KanbanCard = ({ ticket, onEditTicket, onDeleteTicket, onToggleTimer, activ
         : 'border-slate-600'; 
 
     return (
-        <div className={`bg-slate-800/80 p-4 rounded-lg shadow-lg hover:shadow-indigo-500/40 transition-all duration-200 ease-in-out border-l-4 ${cardBorderColor} space-y-2`}>
+        <div className={`bg-slate-800/80 p-3 rounded-lg shadow-lg hover:shadow-indigo-500/40 transition-all duration-200 ease-in-out border-l-4 ${cardBorderColor} space-y-1.5`}> {/* p-4 to p-3, space-y-2 to space-y-1.5 */}
             <h4 className="font-semibold text-gray-50 text-base leading-tight truncate" title={ticket.subject}>{ticket.subject}</h4>
             <p className="text-xs text-gray-400 truncate" title={ticket.accountName || 'N/A'}>Cliente: {ticket.accountName || 'N/A'}</p>
             <p className={`text-xs truncate font-medium ${getPriorityClass(ticket.priority)}`}>Prioridade: {ticket.priority}</p>
             <p className="text-xs text-gray-500">Criado: {formatDateFromISO(ticket.createdAt)}</p>
 
-            <div className="flex justify-between items-center pt-2">
+            <div className="flex justify-between items-center pt-1.5"> {/* pt-2 to pt-1.5 */}
                 <div className={`text-base font-mono tracking-tight flex items-center ${isActive && ticket.status === 'Em Progresso' ? 'text-green-300 animate-pulse' : 'text-indigo-300'}`}>
                     <Clock size={15} className="inline mr-1.5" />
                     {formatTime(currentElapsedTime)}
@@ -486,7 +507,7 @@ const KanbanCard = ({ ticket, onEditTicket, onDeleteTicket, onToggleTimer, activ
                 )}
            </div>
            
-           <div className="flex justify-end space-x-2 mt-3 pt-3 border-t border-slate-700">
+           <div className="flex justify-end space-x-2 mt-2 pt-2 border-t border-slate-700"> {/* mt-3 pt-3 to mt-2 pt-2 */}
                <button onClick={() => onEditTicket(ticket)} title="Editar Ticket" className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-sm hover:shadow-md"><Edit3 size={14} /></button>
                <button onClick={() => setIsConfirmDeleteOpen(true)} title="Excluir Ticket" className="p-2 bg-slate-600/80 text-white rounded-md hover:bg-slate-500 transition-colors shadow-sm hover:shadow-md"><Trash2 size={14} /></button>
            </div>
@@ -499,7 +520,7 @@ const KanbanCard = ({ ticket, onEditTicket, onDeleteTicket, onToggleTimer, activ
 
 const KanbanColumn = ({ title, ticketsInColumn, onEditTicket, onDeleteTicket, onToggleTimer, activeTicketId, getPriorityClass, formatTime, formatDateTimeFromISO, StopTimerModalComponent, ConfirmationModalComponent }) => {
     return (
-        <div className="bg-slate-700/60 p-4 rounded-xl w-[350px] md:w-[380px] flex-shrink-0 shadow-2xl flex flex-col"> {/* Slightly wider, more padding, softer bg */}
+        <div className="bg-slate-700/60 p-4 rounded-xl shadow-2xl flex flex-col flex-1 min-w-[330px]"> {/* MODIFIED: Removed fixed widths and flex-shrink-0, added flex-1 and min-w */}
             <h3 className="text-xl font-bold text-gray-100 mb-5 px-2 pt-1 border-b-2 border-slate-500/80 pb-3 tracking-wide flex justify-between items-center">
                 <span>{title}</span>
                 <span className="text-base font-semibold bg-slate-500/70 px-3 py-1 rounded-full text-gray-50 shadow-sm">{ticketsInColumn.length}</span>
@@ -631,37 +652,37 @@ const TicketItem = ({ ticket, onToggleTimer, onDeleteTicket, onEditTicket, activ
     const styles = getStatusStyles();
 
     return (
-        <div className={`p-5 rounded-lg shadow-lg border-l-4 ${styles.bg} ${styles.border} mb-4 transition-all duration-300`}> {/* Increased p-5, shadow-lg */}
+        <div className={`p-3 rounded-lg shadow-lg border-l-4 ${styles.bg} ${styles.border} mb-4 transition-all duration-300`}> {/* Reduced p-5 to p-3 */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-                <div className={`flex-grow mb-4 sm:mb-0 ${styles.itemText} space-y-1`}> {/* Added space-y-1 for consistent spacing */}
+                <div className={`flex-grow mb-3 sm:mb-0 ${styles.itemText} space-y-1`}> {/* Reduced mb-4 to mb-3, space-y-1 kept */}
                     <div className="flex items-center justify-between">
-                        <h4 className={`text-xl font-semibold ${styles.itemText}`}>{ticket.subject}</h4> {/* Increased subject font size */}
-                        <button onClick={() => setExpanded(!expanded)} className={`p-1.5 ${styles.text} hover:text-indigo-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400`}>{expanded ? <ChevronUp size={22} /> : <ChevronDown size={22} />}</button> {/* Increased icon size and padding, added focus ring */}
+                        <h4 className={`text-lg font-semibold ${styles.itemText}`}>{ticket.subject}</h4> {/* Reduced text-xl to text-lg */}
+                        <button onClick={() => setExpanded(!expanded)} className={`p-1 ${styles.text} hover:text-indigo-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-400`}>{expanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}</button> {/* Adjusted padding and icon size slightly */}
                     </div>
-                    <p className="text-sm text-gray-400">ID: {ticket.ticketIdInput} <span className="text-gray-500 mx-1">|</span> Cliente: {ticket.accountName || 'N/A'}</p> {/* Improved separator and color consistency */}
-                    <p className="text-sm text-gray-400">Prioridade: <span className={getPriorityClass(ticket.priority)}>{ticket.priority}</span> <span className="text-gray-500 mx-1">|</span> Dificuldade: {ticket.difficulty}</p>
-                    <p className="text-sm text-gray-400">Criado em: {formatDateFromISO(ticket.creationTime)}</p>
-                    <p className={`text-md font-semibold ${styles.text}`}>Status: {ticket.status}</p> {/* Increased status font size and weight */}
+                    <p className="text-xs text-gray-400">ID: {ticket.ticketIdInput} <span className="text-gray-500 mx-1">|</span> Cliente: {ticket.accountName || 'N/A'}</p> {/* Consider text-xs for more compactness */}
+                    <p className="text-xs text-gray-400">Prioridade: <span className={getPriorityClass(ticket.priority)}>{ticket.priority}</span> <span className="text-gray-500 mx-1">|</span> Dificuldade: {ticket.difficulty}</p> {/* Consider text-xs */}
+                    <p className="text-xs text-gray-400">Criado em: {formatDateFromISO(ticket.creationTime)}</p> {/* Consider text-xs */}
+                    <p className={`text-sm font-semibold ${styles.text}`}>Status: {ticket.status}</p> {/* Reduced text-md to text-sm */}
                 </div>
-                <div className="flex flex-col items-stretch sm:items-end space-y-3 w-full sm:w-auto"> {/* Increased space-y, items-stretch for full width buttons on mobile */}
-                    <div className="text-2xl font-mono text-indigo-300 tracking-wider flex items-center justify-end sm:justify-start"><Clock size={22} className="inline mr-2 text-indigo-400" />{formatTime(currentElapsedTime)}</div>
-                    <div className="flex space-x-2 justify-end sm:justify-start w-full"> {/* Ensure buttons take available space or justify end */}
+                <div className="flex flex-col items-stretch sm:items-end space-y-2 w-full sm:w-auto"> {/* Reduced space-y-3 to space-y-2 */}
+                    <div className="text-xl font-mono text-indigo-300 tracking-wider flex items-center justify-end sm:justify-start"><Clock size={20} className="inline mr-1.5 text-indigo-400" />{formatTime(currentElapsedTime)}</div> {/* Reduced font size and icon size */}
+                    <div className="flex space-x-2 justify-end sm:justify-start w-full">
                         {ticket.status !== 'Concluído' && (
-                            <button onClick={handleToggle} className={`py-2 px-3 rounded-md text-white transition-colors duration-150 flex items-center space-x-1.5 text-sm shadow-sm hover:shadow-md ${isActive && ticket.status === 'Em Progresso' ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}> {/* Adjusted padding, added shadow */}
-                                {isActive && ticket.status === 'Em Progresso' ? <Pause size={16} /> : <Play size={16} />}
+                            <button onClick={handleToggle} className={`py-1.5 px-2.5 rounded-md text-white transition-colors duration-150 flex items-center space-x-1 text-xs shadow-sm hover:shadow-md ${isActive && ticket.status === 'Em Progresso' ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}> {/* Adjusted padding, font size */}
+                                {isActive && ticket.status === 'Em Progresso' ? <Pause size={14} /> : <Play size={14} />}
                                 <span>{isActive && ticket.status === 'Em Progresso' ? 'Pausar/Parar' : (ticket.status === 'Pausado' ? 'Retomar' : 'Iniciar')}</span>
                             </button>
                         )}
-                        <button onClick={() => onEditTicket(ticket)} title="Editar Ticket" className="py-2 px-3 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors duration-150 shadow-sm hover:shadow-md"><Edit3 size={16} /></button>
-                        <button onClick={() => setIsConfirmDeleteOpen(true)} title="Excluir Ticket" className="py-2 px-3 bg-slate-600 text-white rounded-md hover:bg-slate-500 transition-colors duration-150 shadow-sm hover:shadow-md"><Trash2 size={16} /></button>
+                        <button onClick={() => onEditTicket(ticket)} title="Editar Ticket" className="py-1.5 px-2.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors duration-150 shadow-sm hover:shadow-md"><Edit3 size={14} /></button> {/* Adjusted padding & icon */}
+                        <button onClick={() => setIsConfirmDeleteOpen(true)} title="Excluir Ticket" className="py-1.5 px-2.5 bg-slate-600 text-white rounded-md hover:bg-slate-500 transition-colors duration-150 shadow-sm hover:shadow-md"><Trash2 size={14} /></button> {/* Adjusted padding & icon */}
                     </div>
                 </div>
             </div>
             {expanded && (
-                <div className={`mt-4 pt-4 border-t ${styles.border} border-opacity-60 ${styles.itemText}`}> {/* Increased pt, border-opacity */}
-                    <h5 className="text-md font-semibold mb-2 text-gray-200">Log de Atividades:</h5> {/* Increased font size, adjusted color */}
-                    {ticket.log && ticket.log.length > 0 ? (<ul className="space-y-1.5 text-sm max-h-40 overflow-y-auto bg-slate-700/60 p-3 rounded-md shadow-inner">{ticket.log.slice().reverse().map((entry, index) => (<li key={index} className="p-1.5 rounded-sm text-gray-300 hover:bg-slate-600/50"><strong className="text-indigo-400 font-medium">{formatDateTimeFromISO(entry.timestamp)}:</strong> {entry.action}{entry.reason && <span className="text-gray-400 italic"> (Motivo: {entry.reason})</span>}{entry.checklist && (<span className="text-gray-400 text-xs block mt-0.5">(Ticket: {entry.checklist.respondeuTicket ? 'Sim' : 'Não'}, Planilha: {entry.checklist.respondeuPlanilha ? 'Sim' : 'Não'})</span>)}</li>))}</ul>) : (<p className="text-sm text-gray-400">Nenhuma atividade registrada.</p>)} {/* Increased text size, padding, max-h */}
-                    <h5 className="text-md font-semibold mt-4 mb-2 text-gray-200">Checklist Atual:</h5> {/* Increased mt, font size */}
+                <div className={`mt-3 pt-2 border-t ${styles.border} border-opacity-50 ${styles.itemText}`}> {/* Reduced mt-4 pt-4 to mt-3 pt-2, border-opacity */}
+                    <h5 className="text-sm font-semibold mb-1.5 text-gray-200">Log de Atividades:</h5> {/* Reduced font size and mb */}
+                    {ticket.log && ticket.log.length > 0 ? (<ul className="space-y-1 text-xs max-h-32 overflow-y-auto bg-slate-700/50 p-2 rounded-md shadow-inner">{ticket.log.slice().reverse().map((entry, index) => (<li key={index} className="p-1 rounded-sm text-gray-300 hover:bg-slate-600/40"><strong className="text-indigo-300 font-medium">{formatDateTimeFromISO(entry.timestamp)}:</strong> {entry.action}{entry.reason && <span className="text-gray-400 italic"> (Motivo: {entry.reason})</span>}{entry.checklist && (<span className="text-gray-400 text-[0.7rem] block mt-0.5">(Ticket: {entry.checklist.respondeuTicket ? 'Sim' : 'Não'}, Planilha: {entry.checklist.respondeuPlanilha ? 'Sim' : 'Não'})</span>)}</li>))}</ul>) : (<p className="text-xs text-gray-400">Nenhuma atividade registrada.</p>)} {/* Reduced font, padding, max-h */}
+                    <h5 className="text-sm font-semibold mt-3 mb-1.5 text-gray-200">Checklist Atual:</h5> {/* Reduced mt, font size, mb */}
                     <ul className="text-sm space-y-1.5 text-gray-300"> {/* Increased text size, space-y */}
                         <li className="flex items-center p-1">{ticket.checklist?.respondeuTicket ? <CheckCircle size={16} className="text-green-400 mr-2"/> : <XCircle size={16} className="text-red-400 mr-2"/>}Respondeu Ticket Principal</li>
                         <li className="flex items-center p-1">{ticket.checklist?.respondeuPlanilha ? <CheckCircle size={16} className="text-green-400 mr-2"/> : <XCircle size={16} className="text-red-400 mr-2"/>}Atualizou Planilha</li>
