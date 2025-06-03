@@ -36,7 +36,7 @@ const db = new sqlite3.Database(DBSOURCE, (err) => {
             currentTimerStartTime TEXT, -- Armazenar como ISO String ou null
             lastUpdatedAt TEXT NOT NULL, -- Armazenar como ISO String
             createdAt TEXT NOT NULL, -- Armazenar como ISO String
-            clientId TEXT, 
+            clientId TEXT,
             FOREIGN KEY (clientId) REFERENCES clients(id)
         )`, (err) => {
             if (err) {
