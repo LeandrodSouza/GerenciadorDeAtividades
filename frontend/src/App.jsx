@@ -80,6 +80,13 @@ const formatDateTimeFromISO = (isoString) => {
     catch (e) { return 'Data/Hora inválida'; }
 };
 
+const getPriorityClass = (priority) => { 
+    if (priority === 'Solicitado por Terceiros') return 'text-purple-400 font-bold'; 
+    if (priority === 'Alto Impacto') return 'text-red-400'; 
+    if (priority === 'Médio Impacto') return 'text-yellow-400'; 
+    return 'text-blue-400'; 
+};
+
 const Modal = ({ isOpen, onClose, title, children, size = 'max-w-md' }) => { 
     if (!isOpen) return null;
     return (
@@ -619,7 +626,7 @@ const TicketItem = ({ ticket, onToggleTimer, onDeleteTicket, onEditTicket, activ
     const handleToggle = () => { if (isActive && ticket.status === 'Em Progresso') { setIsStopModalOpen(true); } else { if (ticket.status !== 'Concluído') { onToggleTimer(ticket.id, ticket.status); }}};
     const handleStopConfirm = async (reason, checklist, isCompleting) => { await onToggleTimer(ticket.id, ticket.status, reason, checklist, isCompleting); setIsStopModalOpen(false); };
     const handleDelete = () => { onDeleteTicket(ticket.id); setIsConfirmDeleteOpen(false); };
-    const getPriorityClass = (priority) => { if (priority === 'Solicitado por Terceiros') return 'text-purple-400 font-bold'; if (priority === 'Alto Impacto') return 'text-red-400'; if (priority === 'Médio Impacto') return 'text-yellow-400'; return 'text-blue-400'; };
+    // const getPriorityClass = (priority) => { if (priority === 'Solicitado por Terceiros') return 'text-purple-400 font-bold'; if (priority === 'Alto Impacto') return 'text-red-400'; if (priority === 'Médio Impacto') return 'text-yellow-400'; return 'text-blue-400'; };
     const getStatusStyles = () => { switch (ticket.status) { case 'Em Progresso': return { bg: 'bg-green-500/20', text: 'text-green-300', border: 'border-green-500', itemText: 'text-gray-100' }; case 'Pausado': return { bg: 'bg-yellow-500/20', text: 'text-yellow-300', border: 'border-yellow-500', itemText: 'text-gray-100' }; case 'Concluído': return { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500', itemText: 'text-gray-300' }; case 'Pendente': return { bg: 'bg-slate-700', text: 'text-gray-400', border: 'border-slate-600', itemText: 'text-gray-200' }; default: return { bg: 'bg-slate-700', text: 'text-gray-400', border: 'border-slate-600', itemText: 'text-gray-200'};}};
     const styles = getStatusStyles();
 
