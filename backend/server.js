@@ -12,27 +12,18 @@ app.use(express.json());
 
 // GET /api/tickets - Listar todos os tickets
 app.get("/api/tickets", (req, res) => {
-    const sql = `
-        SELECT t.*, c.name as clientName
-        FROM tickets t
-        LEFT JOIN clients c ON t.clientId = c.id
-        ORDER BY t.createdAt DESC
-    `;
+    const sql = "SELECT * FROM tickets ORDER BY createdAt DESC";
     db.all(sql, [], (err, rows) => {
         if (err) {
             res.status(500).json({ "error": err.message });
             return;
         }
-        const tickets = rows.map(row => {
-            const { clientName, ...ticketData } = row;
-            return {
-                ...ticketData,
-                accountName: clientName, // Use the joined name
-                isActive: !!row.isActive,
-                log: row.log ? JSON.parse(row.log) : [],
-                checklist: row.checklist ? JSON.parse(row.checklist) : { respondeuTicket: false, respondeuPlanilha: false }
-            };
-        });
+        const tickets = rows.map(row => ({
+            ...row,
+            isActive: !!row.isActive,
+            log: row.log ? JSON.parse(row.log) : [],
+            checklist: row.checklist ? JSON.parse(row.checklist) : { respondeuTicket: false, respondeuPlanilha: false }
+        }));
         res.json({
             "message": "success",
             "data": tickets
@@ -42,24 +33,17 @@ app.get("/api/tickets", (req, res) => {
 
 // GET /api/tickets/:id - Obter um ticket específico
 app.get("/api/tickets/:id", (req, res) => {
-    const sql = `
-        SELECT t.*, c.name as clientName
-        FROM tickets t
-        LEFT JOIN clients c ON t.clientId = c.id
-        WHERE t.id = ?
-    `;
+    const sql = "SELECT * FROM tickets WHERE id = ?";
     db.get(sql, [req.params.id], (err, row) => {
         if (err) {
             res.status(500).json({ "error": err.message });
             return;
         }
         if (row) {
-            const { clientName, ...ticketData } = row;
             res.json({
                 "message": "success",
                 "data": {
-                    ...ticketData,
-                    accountName: clientName, // Use the joined name
+                    ...row,
                     isActive: !!row.isActive,
                     log: row.log ? JSON.parse(row.log) : [],
                     checklist: row.checklist ? JSON.parse(row.checklist) : { respondeuTicket: false, respondeuPlanilha: false }
@@ -74,18 +58,14 @@ app.get("/api/tickets/:id", (req, res) => {
 // POST /api/tickets - Criar um novo ticket
 app.post("/api/tickets", (req, res) => {
     const {
-        ticketIdInput, subject, clientId, /* accountName is removed */ priority, difficulty,
+        ticketIdInput, subject, accountName, priority, difficulty,
         creationTime, status = 'Pendente', elapsedTime = 0, isActive = false,
         log = [], checklist = { respondeuTicket: false, respondeuPlanilha: false },
-        currentTimerStartTime = null
+        currentTimerStartTime = null // Adicionado para consistência
     } = req.body;
 
     if (!subject) {
         res.status(400).json({ "error": "O campo 'subject' é obrigatório" });
-        return;
-    }
-    if (!clientId) { // Make clientId mandatory
-        res.status(400).json({ "error": "O campo 'clientId' é obrigatório" });
         return;
     }
 
@@ -93,16 +73,18 @@ app.post("/api/tickets", (req, res) => {
     const nowISO = new Date().toISOString();
 
     const sql = `INSERT INTO tickets (
-        id, ticketIdInput, subject, priority, difficulty,
+        id, ticketIdInput, subject, accountName, priority, difficulty,
         creationTime, status, elapsedTime, isActive, log, checklist, 
-        currentTimerStartTime, lastUpdatedAt, createdAt, clientId
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`; // 15 params, accountName removed
+        currentTimerStartTime, lastUpdatedAt, createdAt
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
     
     const params = [
-        newId, ticketIdInput || `T-${Date.now().toString().slice(-6)}`, subject,
+        newId, ticketIdInput || `T-${Date.now().toString().slice(-6)}`, subject, accountName,
         priority, difficulty, creationTime || nowISO, status, elapsedTime, 
         isActive ? 1 : 0, JSON.stringify(log), JSON.stringify(checklist),
-        currentTimerStartTime, nowISO, nowISO, clientId // clientId added
+        currentTimerStartTime, // Pode ser null
+        nowISO, // lastUpdatedAt
+        nowISO  // createdAt
     ];
 
     db.run(sql, params, function (err) {
@@ -110,32 +92,19 @@ app.post("/api/tickets", (req, res) => {
             res.status(500).json({ "error": err.message });
             return;
         }
-        // Fetch client name for the response
-        db.get("SELECT name FROM clients WHERE id = ?", [clientId], (clientErr, clientRow) => {
-            // Not critical if client fetch fails for response, but log it.
-            // The ticket is created, GET requests will handle joins.
-            if (clientErr) {
-                console.error("Error fetching client name for POST response:", clientErr.message);
-            }
-
-            const createdTicket = {
-                id: newId,
-                ticketIdInput: params[1], // ticketIdInput from params
-                subject,
-                clientId, // Include clientId
-                accountName: clientRow ? clientRow.name : "Cliente não encontrado", // Add accountName from join/fetch
-                priority, difficulty,
-                creationTime: params[5], // creationTime from params
-                status, elapsedTime, isActive, log, checklist,
-                currentTimerStartTime: params[11], // currentTimerStartTime from params
-                lastUpdatedAt: nowISO,
-                createdAt: nowISO
-            };
-            res.status(201).json({
-                "message": "success",
-                "data": createdTicket,
-                "id": newId
-            });
+        // Retorna o objeto completo do ticket criado
+        const createdTicket = {
+            id: newId,
+            ticketIdInput: params[1], subject, accountName, priority, difficulty,
+            creationTime: params[6], status, elapsedTime, isActive, log, checklist,
+            currentTimerStartTime: params[12],
+            lastUpdatedAt: nowISO,
+            createdAt: nowISO
+        };
+        res.status(201).json({
+            "message": "success",
+            "data": createdTicket,
+            "id": newId
         });
     });
 });
@@ -144,7 +113,7 @@ app.post("/api/tickets", (req, res) => {
 app.put("/api/tickets/:id", (req, res) => {
     const id = req.params.id;
     const {
-        ticketIdInput, subject, clientId, /* accountName removed */ priority, difficulty, creationTime,
+        ticketIdInput, subject, accountName, priority, difficulty, creationTime,
         status, elapsedTime, isActive, log, checklist, currentTimerStartTime
     } = req.body;
     
@@ -169,7 +138,7 @@ app.put("/api/tickets/:id", (req, res) => {
 
     addField("ticketIdInput", ticketIdInput);
     addField("subject", subject);
-    addField("clientId", clientId); // Added clientId
+    addField("accountName", accountName);
     addField("priority", priority);
     addField("difficulty", difficulty);
     addField("creationTime", creationTime);
@@ -178,7 +147,7 @@ app.put("/api/tickets/:id", (req, res) => {
     addField("isActive", isActive);
     addField("log", log);
     addField("checklist", checklist);
-    addField("currentTimerStartTime", currentTimerStartTime);
+    addField("currentTimerStartTime", currentTimerStartTime); // Pode ser null intencionalmente
 
     if (fieldsToUpdate.length === 0) {
         res.status(400).json({ "error": "Nenhum campo fornecido para atualização" });
@@ -257,7 +226,7 @@ app.post('/api/clients', (req, res) => {
         return;
     }
     const upperCaseName = name.trim().toUpperCase(); // Transform to uppercase
-    const id = require('uuid').v4();
+    const id = uuidv4(); // Use uuidv4 for ID generation
 
     // Check if client with the same uppercase name already exists
     db.get('SELECT * FROM clients WHERE name = ?', [upperCaseName], (err, row) => {
@@ -275,8 +244,8 @@ app.post('/api/clients', (req, res) => {
         db.run('INSERT INTO clients (id, name) VALUES (?, ?)', [id, upperCaseName], function (err) {
             if (err) {
                 // Check for SQLite UNIQUE constraint error (SQLITE_CONSTRAINT_UNIQUE)
+                // This is an extra check, the db.get should catch most cases
                 if (err.message && err.message.includes('UNIQUE constraint failed: clients.name')) {
-                     // This is an extra check, the db.get should catch most cases
                     res.status(409).json({ error: "Cliente com este nome já existe (constraint)" });
                 } else {
                     res.status(500).json({ error: err.message });
@@ -288,11 +257,55 @@ app.post('/api/clients', (req, res) => {
     });
 });
 
+// PUT /api/clients/:id - Update client name
+app.put('/api/clients/:id', (req, res) => {
+    const { id } = req.params;
+    const { name } = req.body;
+
+    if (!name || !name.trim()) {
+        return res.status(400).json({ error: "O campo 'name' é obrigatório para atualização." });
+    }
+
+    const upperCaseName = name.trim().toUpperCase();
+
+    // 1. Check if the new name already exists for a *different* client
+    db.get('SELECT * FROM clients WHERE name = ? AND id != ?', [upperCaseName, id], (err, row) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+        if (row) {
+            return res.status(409).json({ error: "Outro cliente já existe com este nome.", client: row });
+        }
+
+        // 2. Proceed with the update if name is unique (or same client)
+        const sql = 'UPDATE clients SET name = ? WHERE id = ?';
+        db.run(sql, [upperCaseName, id], function (errUpdate) {
+            if (errUpdate) {
+                return res.status(500).json({ error: errUpdate.message });
+            }
+            if (this.changes === 0) {
+                return res.status(404).json({ message: "Cliente não encontrado para atualização." });
+            }
+            // Fetch and return the updated client
+            db.get('SELECT * FROM clients WHERE id = ?', [id], (errFetch, updatedClient) => {
+                if (errFetch) {
+                    return res.status(500).json({ error: errFetch.message });
+                }
+                res.json({ message: 'success', data: updatedClient });
+            });
+        });
+    });
+});
+
 // DELETE /api/clients/:id - Remover cliente
 app.delete('/api/clients/:id', (req, res) => {
     db.run('DELETE FROM clients WHERE id = ?', [req.params.id], function (err) {
         if (err) {
             res.status(500).json({ error: err.message });
+            return;
+        }
+        if (this.changes === 0) { // Check if any row was deleted
+            res.status(404).json({ message: "Cliente não encontrado para exclusão." });
             return;
         }
         res.json({ message: 'success', deleted: this.changes });
