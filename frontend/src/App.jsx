@@ -134,13 +134,118 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message }) => {
     );
 };
 
+// EditClientModal Component
+function EditClientModal({ isOpen, onClose, client, onClientUpdated, showToast }) {
+    const [name, setName] = useState('');
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (isOpen) {
+            setName(client ? client.name || '' : '');
+            setError('');
+            // setLoading(false); // Reset loading only if it was stuck, typically managed by submit
+        } else {
+            // Reset fields when modal is closed, ensures clean state for next open
+            setName('');
+            setError('');
+            setLoading(false);
+        }
+    }, [isOpen, client]);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError(''); // Clear previous errors
+
+        if (!name.trim()) {
+            setError('Nome é obrigatório');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_URL}/clients/${client.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name.trim().toUpperCase() }),
+            });
+
+            if (!res.ok) {
+                const data = await res.json();
+                const apiError = data.error || 'Erro ao atualizar cliente';
+                setError(apiError); // Show error in modal
+                if (showToast) showToast(apiError, "error"); // Show error toast
+                setLoading(false);
+                return;
+            }
+
+            if (showToast) showToast("Cliente atualizado com sucesso!", "success");
+            if (onClientUpdated) onClientUpdated();
+            onClose(); // Close modal on success
+        } catch (err) {
+            const catchError = 'Falha na comunicação com o servidor ao atualizar cliente.';
+            setError(catchError);
+             if (showToast) showToast(catchError, "error");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Editar Cliente">
+            <form onSubmit={handleSubmit} className="space-y-6">
+                <div>
+                    <label htmlFor="clientNameEdit" className="block text-sm font-medium text-gray-700 mb-1">Nome do Cliente *</label>
+                    <input
+                        type="text"
+                        id="clientNameEdit"
+                        value={name}
+                        onChange={e => setName(e.target.value)} // Uppercase conversion happens on submit
+                        placeholder="Nome do Cliente"
+                        className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900"
+                    />
+                </div>
+                {error && <div className="text-red-600 text-sm p-2 bg-red-100 rounded-md">{error}</div>}
+                <div className="flex justify-end space-x-3 pt-2">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md border border-gray-300 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        disabled={loading}
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        type="submit"
+                        className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 flex items-center"
+                        disabled={loading}
+                    >
+                        {loading ? (
+                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        ) : <Save size={18} className="mr-2"/>}
+                        {loading ? 'Salvando...' : 'Salvar Alterações'}
+                    </button>
+                </div>
+            </form>
+        </Modal>
+    );
+}
+
 const ClientManagementView = () => {
     const [clients, setClients] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
     const [isClientModalOpen, setIsClientModalOpen] = useState(false);
-    // eslint-disable-next-line no-unused-vars
-    const [editingClient, setEditingClient] = useState(null); // Placeholder for future edit functionality
+    const [editingClient, setEditingClient] = useState(null);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isConfirmDeleteModalOpen, setIsConfirmDeleteModalOpen] = useState(false);
+    const [deletingClientId, setDeletingClientId] = useState(null);
+
 
     const fetchAndSetClients = useCallback(async () => {
         setIsLoading(true);
@@ -160,32 +265,95 @@ const ClientManagementView = () => {
         fetchAndSetClients();
     }, [fetchAndSetClients]);
 
+    // This showToast is local to ClientManagementView and will be passed to EditClientModal
+    const showToast = useCallback((message, type) => {
+        // This is a placeholder. In the main App component, a real showToast is defined.
+        // For ClientManagementView, if it's used standalone or needs its own,
+        // it should call the global one or have its own ToastMessage rendering.
+        // For now, we assume it's passed from App or App.showToast is globally accessible.
+        // The prompt implies App.showToast is used.
+        // Let's find where showToast is *actually* defined for the App component.
+        // It's defined in `App` component and passed down.
+        // So, ClientManagementView should ideally receive `showToast` as a prop if it's not App itself.
+        // However, the current structure has ClientManagementView defining its own `showToast`.
+        // We'll keep this local definition and pass it to EditClientModal.
+        // The main App's showToast will be used by other parts of the application.
+        // console.log(`ClientManagementView Toast: ${message} (${type})`);
+        // For the purpose of this subtask, we assume this showToast is connected to a real toast mechanism.
+        // If `ClientManagementView` is rendered by `App`, `App`'s `showToast` should be passed.
+        // Let's assume `ClientManagementView` receives `showToast` from `App` or uses a context.
+        // For the sake of this exercise, we'll use this local one and pass it.
+        // The provided App.jsx has showToast in the main App scope.
+        // ClientManagementView doesn't receive it as a prop in the current code.
+        // It *defines* its own. This is what will be passed to EditClientModal.
+
+        // Re-checking the prompt: "The showToast function used in ClientManagementView should be passed as a prop to EditClientModal."
+        // "The ClientManagementView already has a showToast function defined, this is the one to pass to EditClientModal."
+        // This confirms the local showToast is the one to use.
+        // To make it actually display, it should be connected to the ToastMessage component.
+        // For now, it's a console log as per the original placeholder.
+        // Let's ensure it's at least available and passed.
+        // The main `App`'s `showToast` is what `ClientModal` (for add) uses via `onClientAdded` indirectly.
+        // This `showToast` will be used by `EditClientModal` directly.
+         // This is a placeholder. A real app would have a global toast system.
+        // For now, using console.log to simulate.
+        // The main App component actually has a working showToast.
+        // This component is nested. It should ideally receive showToast from App.
+        // For this exercise, we'll just use the one defined here as per the prompt.
+        const appShowToast = window.globalShowToast; // Accessing the global one for actual display
+        if (appShowToast) {
+            appShowToast(message, type);
+        } else {
+            console.warn("ClientManagementView: showToast function not fully connected to UI. Message:", message, "Type:", type);
+        }
+    }, []);
+
+
     const handleClientAdded = () => {
-        fetchAndSetClients(); // Re-fetch clients after adding a new one
-        showToast("Cliente adicionado com sucesso!", "success"); // showToast should be passed or globally available
+        fetchAndSetClients();
+        showToast("Cliente adicionado com sucesso!", "success");
     };
 
-    // Placeholder for a global showToast, ideally passed via props or context
-    const showToast = (message, type) => {
-        console.log(`Toast: ${message} (${type})`);
-        // In a real app, this would trigger a visual toast notification
-    };
-
-
-    // Placeholder actions - these would eventually open modals or forms
     const handleEditClient = (client) => {
         setEditingClient(client);
-        // setIsEditModalOpen(true); // Example for an edit modal
-        console.log("Editar cliente:", client);
-        showToast("Funcionalidade de edição de cliente ainda não implementada.", "info");
+        setIsEditModalOpen(true);
+    };
+
+    const handleClientUpdated = () => {
+        fetchAndSetClients();
+        setIsEditModalOpen(false);
+        // Success toast is shown by EditClientModal itself
     };
 
     const handleDeleteClient = (clientId) => {
-        console.log("Excluir cliente:", clientId);
-        // Implement actual deletion logic here, then refetch or update state
-        // For now, just a placeholder:
-        // setClients(prevClients => prevClients.filter(c => c.id !== clientId));
-        showToast("Funcionalidade de exclusão de cliente ainda não implementada.", "info");
+        setDeletingClientId(clientId);
+        setIsConfirmDeleteModalOpen(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!deletingClientId) {
+            console.error("No client ID specified for deletion.");
+            showToast("ID do cliente não especificado para exclusão.", "error");
+            return;
+        }
+        try {
+            const response = await fetch(`${API_BASE_URL}/clients/${deletingClientId}`, { method: 'DELETE' });
+            if (!response.ok) {
+                let errorMsg = `Erro ao excluir cliente. Status: ${response.status}`;
+                try {
+                    const data = await response.json();
+                    errorMsg = data.error || errorMsg;
+                } catch (e) { /* Ignore if response is not JSON */ }
+                throw new Error(errorMsg);
+            }
+            fetchAndSetClients(); // Refresh list
+            showToast("Cliente excluído com sucesso!", "success");
+        } catch (err) {
+            showToast(err.message || "Falha ao excluir cliente.", "error");
+        } finally {
+            setIsConfirmDeleteModalOpen(false);
+            setDeletingClientId(null);
+        }
     };
 
 
@@ -244,9 +412,29 @@ const ClientManagementView = () => {
                 onClose={() => setIsClientModalOpen(false)}
                 onClientAdded={handleClientAdded}
             />
-
-            {/* Placeholder for Edit Client Modal - to be implemented */}
-            {/* <EditClientModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} client={editingClient} onClientUpdated={handleClientUpdated} /> */}
+            {/* Edit Client Modal */}
+            <EditClientModal
+                isOpen={isEditModalOpen}
+                onClose={() => setIsEditModalOpen(false)}
+                client={editingClient}
+                onClientUpdated={handleClientUpdated}
+                showToast={showToast} // Pass the local showToast function
+            />
+            {/* Confirmation Modal for Deletion */}
+            <ConfirmationModal
+                isOpen={isConfirmDeleteModalOpen}
+                onClose={() => {
+                    setIsConfirmDeleteModalOpen(false);
+                    setDeletingClientId(null);
+                }}
+                onConfirm={handleConfirmDelete}
+                title="Confirmar Exclusão de Cliente"
+                message={
+                    deletingClientId && clients.find(c => c.id === deletingClientId)
+                        ? `Tem certeza que deseja excluir o cliente "${clients.find(c => c.id === deletingClientId).name}"? Esta ação não pode ser desfeita.`
+                        : "Tem certeza que deseja excluir este cliente? Esta ação não pode ser desfeita."
+                }
+            />
         </div>
     );
 };
@@ -760,8 +948,17 @@ function App() {
     const showToast = (message, type = 'info') => {
         const newKey = Date.now();
         setToast({ message, type, key: newKey });
+        // Make showToast globally available for ClientManagementView if needed, or pass it down.
+        // For now, ClientManagementView defines its own placeholder.
+        // This is the main App's showToast.
+        window.globalShowToast = (msg, toastType) => setToast({ message: msg, type: toastType, key: Date.now() });
         setTimeout(() => { setToast(prev => (prev.key === newKey ? { message: '', type: '', key: 0 } : prev)); }, 3000);
     };
+    useEffect(() => { // Make the main app's showToast globally available for simplicity in this exercise
+        window.globalShowToast = showToast;
+        return () => { delete window.globalShowToast; } // Cleanup
+    }, [showToast]);
+
 
     const fetchTickets = useCallback(async () => {
         setIsLoading(true); setError(null);
@@ -987,7 +1184,23 @@ function App() {
                     {currentView === 'clients' && ( <ClientManagementView /> )}
                 </main>
                 <TicketModal isOpen={isTicketModalOpen} onClose={handleCloseTicketModal} ticketToEdit={editingTicket} onTicketAddedOrUpdated={handleTicketAddedOrUpdated} clients={clients} showToast={showToast} onOpenClientModal={() => setIsClientModalOpen(true)} />
-                <ClientModal isOpen={isClientModalOpen} onClose={() => setIsClientModalOpen(false)} onClientAdded={() => { fetchClients().then(newClients => { setClients(newClients); }); setIsClientModalOpen(false); showToast("Cliente cadastrado com sucesso!", "success"); }} />
+                {/* ClientModal for adding clients, uses the main App's showToast indirectly via onClientAdded */}
+                <ClientModal
+                    isOpen={isClientModalOpen}
+                    onClose={() => setIsClientModalOpen(false)}
+                    onClientAdded={() => {
+                        fetchClients().then(newClients => {
+                            setClients(newClients);
+                            // If ClientManagementView is active, it will refetch. If not, this updates App's client list.
+                            // This relies on ClientManagementView's useEffect to pick up changes if it's the current view,
+                            // or handleClientAdded in ClientManagementView.
+                            // The current structure means ClientManagementView is independent for its client list.
+                            // This global client list in App is primarily for the TicketModal.
+                        });
+                        setIsClientModalOpen(false);
+                        showToast("Cliente cadastrado com sucesso!", "success"); // Uses App's showToast
+                    }}
+                />
                 {isStopModalOpenForKanban && ticketForStopModal && (
                     <StopTimerModal
                         isOpen={isStopModalOpenForKanban}

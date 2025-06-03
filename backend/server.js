@@ -40,6 +40,45 @@ app.get("/api/tickets", (req, res) => {
     });
 });
 
+// PUT /api/clients/:id - Atualizar cliente
+app.put('/api/clients/:id', (req, res) => {
+    const { id } = req.params;
+    const { name } = req.body;
+
+    if (!name || !name.trim()) {
+        res.status(400).json({ error: "O campo 'name' é obrigatório para atualização" });
+        return;
+    }
+    const upperCaseName = name.trim().toUpperCase();
+
+    // Primeiro, verifique se outro cliente com o novo nome já existe
+    db.get('SELECT id FROM clients WHERE name = ? AND id != ?', [upperCaseName, id], (err, row) => {
+        if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+        }
+        if (row) {
+            // Outro cliente com este nome já existe
+            res.status(409).json({ error: "Outro cliente com este nome já existe" });
+            return;
+        }
+
+        // Se não houver conflito de nome, prossiga com a atualização
+        const sql = 'UPDATE clients SET name = ? WHERE id = ?';
+        db.run(sql, [upperCaseName, id], function (err) {
+            if (err) {
+                res.status(500).json({ error: err.message });
+                return;
+            }
+            if (this.changes === 0) {
+                res.status(404).json({ error: "Cliente não encontrado para atualização" });
+                return;
+            }
+            res.json({ message: 'success', data: { id: id, name: upperCaseName } });
+        });
+    });
+});
+
 // GET /api/tickets/:id - Obter um ticket específico
 app.get("/api/tickets/:id", (req, res) => {
     const sql = `
