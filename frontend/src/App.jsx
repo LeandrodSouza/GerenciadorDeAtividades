@@ -1032,6 +1032,11 @@ const ReportsView = ({ tickets }) => {
     const [isLoadingReport, setIsLoadingReport] = useState(false);
 
     const generateReport = () => {
+        if (!tickets || tickets.length === 0) {
+            showToast("Não há tickets para gerar relatórios.", "info");
+            setReportData(null); // Clear any previous report
+            return;
+        }
         setIsLoadingReport(true); setReportData(null);
         if (reportType === 'daily') {
             const dailySummary = tickets.map(ticket => {
@@ -1062,11 +1067,54 @@ const ReportsView = ({ tickets }) => {
             <div className="flex flex-col sm:flex-row gap-4 mb-6 items-end">
                 <div><label htmlFor="reportType" className="block text-sm font-medium text-gray-300 mb-1">Tipo de Relatório</label><select id="reportType" value={reportType} onChange={(e) => setReportType(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900"><option value="daily">Diário</option><option value="weekly">Semanal</option></select></div>
                 <div><label htmlFor="selectedDate" className="block text-sm font-medium text-gray-300 mb-1">{reportType === 'daily' ? 'Selecione o Dia' : 'Selecione o Início da Semana'}</label><input type="date" id="selectedDate" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900" /></div>
-                <button onClick={generateReport} disabled={isLoadingReport} className="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-150 ease-in-out flex items-center justify-center sm:w-auto w-full">{isLoadingReport ? 'Gerando...' : 'Gerar Relatório'}</button>
+                <button onClick={generateReport} disabled={isLoadingReport || !tickets || tickets.length === 0} className="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-150 ease-in-out flex items-center justify-center sm:w-auto w-full disabled:opacity-50 disabled:cursor-not-allowed">{isLoadingReport ? 'Gerando...' : 'Gerar Relatório'}</button>
             </div>
-            {isLoadingReport && <p className="text-gray-300">Carregando relatório...</p>}
-            {reportData && reportData.type === 'daily' && (<div><h3 className="text-xl font-semibold text-gray-200 mb-3">Relatório Diário - {reportData.date}</h3>{reportData.summary.length === 0 ? <p className="text-gray-400">Nenhuma atividade encontrada para este dia.</p> : (<ul className="space-y-3">{reportData.summary.map(item => (<li key={item.id} className="p-3 bg-slate-700 rounded-md"><p className="font-semibold text-indigo-400">{item.subject}</p><p className="text-sm text-gray-300">Tempo Estimado no Dia: {item.timeSpentDisplay}</p>{item.actions.length > 0 && <p className="text-xs text-gray-400 mt-1">Ações Registradas:</p>}<ul className="list-disc list-inside ml-2 text-xs text-gray-400">{item.actions.map((action, i) => <li key={i}>{action}</li>)}</ul></li>))}</ul>)}</div>)}
-            {reportData && reportData.type === 'weekly' && (<div><h3 className="text-xl font-semibold text-gray-200 mb-3">Relatório Semanal ({reportData.startDate} - {reportData.endDate})</h3>{reportData.summary.length === 0 ? <p className="text-gray-400">Nenhuma atividade encontrada para esta semana.</p> : (<ul className="space-y-3">{reportData.summary.map(item => (<li key={item.id} className="p-3 bg-slate-700 rounded-md"><p className="font-semibold text-indigo-400">{item.subject}</p><p className="text-sm text-gray-300">Tempo Total no Ticket: {item.totalTime}</p><p className="text-sm text-gray-400">Status: {item.status}</p></li>))}</ul>)}</div>)}
+
+            {isLoadingReport && <p className="text-gray-300 text-center py-4">Carregando relatório...</p>}
+
+            {!isLoadingReport && (!tickets || tickets.length === 0) && (
+                <p className="text-gray-400 text-center py-10">Nenhum ticket disponível para gerar relatórios.</p>
+            )}
+
+            {!isLoadingReport && tickets && tickets.length > 0 && !reportData && (
+                 <p className="text-gray-400 text-center py-10">Selecione os filtros e clique em "Gerar Relatório" para visualizar os dados.</p>
+            )}
+
+            {!isLoadingReport && reportData && reportData.summary.length === 0 && (
+                 <p className="text-gray-400 text-center py-10">Nenhuma atividade encontrada para os critérios selecionados.</p>
+            )}
+
+            {!isLoadingReport && reportData && reportData.summary.length > 0 && reportData.type === 'daily' && (
+                <div>
+                    <h3 className="text-xl font-semibold text-gray-200 mb-3">Relatório Diário - {reportData.date}</h3>
+                    <ul className="space-y-3">
+                        {reportData.summary.map(item => (
+                            <li key={item.id} className="p-3 bg-slate-700 rounded-md">
+                                <p className="font-semibold text-indigo-400">{item.subject}</p>
+                                <p className="text-sm text-gray-300">Tempo Estimado no Dia: {item.timeSpentDisplay}</p>
+                                {item.actions.length > 0 && <p className="text-xs text-gray-400 mt-1">Ações Registradas:</p>}
+                                <ul className="list-disc list-inside ml-2 text-xs text-gray-400">
+                                    {item.actions.map((action, i) => <li key={i}>{action}</li>)}
+                                </ul>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+            {!isLoadingReport && reportData && reportData.summary.length > 0 && reportData.type === 'weekly' && (
+                <div>
+                    <h3 className="text-xl font-semibold text-gray-200 mb-3">Relatório Semanal ({reportData.startDate} - {reportData.endDate})</h3>
+                    <ul className="space-y-3">
+                        {reportData.summary.map(item => (
+                            <li key={item.id} className="p-3 bg-slate-700 rounded-md">
+                                <p className="font-semibold text-indigo-400">{item.subject}</p>
+                                <p className="text-sm text-gray-300">Tempo Total no Ticket: {item.totalTime}</p>
+                                <p className="text-sm text-gray-400">Status: {item.status}</p>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
         </div>
     );
 };
@@ -1434,19 +1482,7 @@ function App() {
                         )}
                         </>
                     )}
-                    {currentView === 'reports' && (<ReportsView tickets={tickets} />)}
-                    {currentView === 'clients' && ( <ClientManagementView /> )}
-                            onEditTicket={handleEditTicket}
-                            onDeleteTicket={handleDeleteTicket}
-                            onToggleTimer={handleToggleTimer}
-                            activeTicketId={activeTicketId}
-                            getPriorityClass={getPriorityClass}
-                            formatTime={formatTime}
-                            formatDateTimeFromISO={formatDateTimeFromISO}
-                            onDragEnd={handleDragEnd}
-                            onOpenTicketModal={() => { setEditingTicket(null); setIsTicketModalOpen(true); }} // Pass the handler
-                        />
-                    )}
+                    {/* The stray code was here. It has been removed. */}
                     {currentView === 'reports' && (<ReportsView tickets={tickets} />)}
                     {currentView === 'clients' && ( <ClientManagementView /> )}
                 </main>
