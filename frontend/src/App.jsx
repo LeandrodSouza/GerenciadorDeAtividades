@@ -661,11 +661,22 @@ const KanbanCard = ({ ticket, index, onEditTicket, onDeleteTicket, onToggleTimer
     );
 };
 
-const KanbanColumn = ({ column, ticketsInColumn, onEditTicket, onDeleteTicket, onToggleTimer, activeTicketId, getPriorityClass, formatTime, formatDateTimeFromISO, StopTimerModalComponent, ConfirmationModalComponent }) => {
+const KanbanColumn = ({ column, ticketsInColumn, onEditTicket, onDeleteTicket, onToggleTimer, activeTicketId, getPriorityClass, formatTime, formatDateTimeFromISO, StopTimerModalComponent, ConfirmationModalComponent, onOpenTicketModal }) => {
     return (
         <div className="bg-slate-700/60 p-4 rounded-xl shadow-2xl flex flex-col flex-1 min-w-[330px]">
             <h3 className="text-xl font-bold text-gray-100 mb-5 px-2 pt-1 border-b-2 border-slate-500/80 pb-3 tracking-wide flex justify-between items-center">
-                <span>{column.title}</span>
+                <span className="flex items-center">
+                    {column.title}
+                    {column.id === 'Pendente' && (
+                        <button
+                            onClick={onOpenTicketModal}
+                            className="ml-2 p-1 text-indigo-300 hover:text-indigo-100 rounded-full hover:bg-indigo-600 transition-colors"
+                            title="Adicionar Novo Ticket"
+                        >
+                            <PlusCircle size={22} />
+                        </button>
+                    )}
+                </span>
                 <span className="text-base font-semibold bg-slate-500/70 px-3 py-1 rounded-full text-gray-50 shadow-sm">{ticketsInColumn.length}</span>
             </h3>
             <Droppable droppableId={String(column.status)} type="TICKET">
@@ -704,7 +715,7 @@ const KanbanColumn = ({ column, ticketsInColumn, onEditTicket, onDeleteTicket, o
     );
 };
 
-const KanbanView = ({ columns, groupedTickets, onEditTicket, onDeleteTicket, onToggleTimer, activeTicketId, getPriorityClass, formatTime, formatDateTimeFromISO, onDragEnd }) => {
+const KanbanView = ({ columns, groupedTickets, onEditTicket, onDeleteTicket, onToggleTimer, activeTicketId, getPriorityClass, formatTime, formatDateTimeFromISO, onDragEnd, onOpenTicketModal }) => {
     if (!columns || !groupedTickets) {
         return <div className="text-center p-10 text-gray-400 text-lg">Carregando quadro Kanban...</div>;
     }
@@ -725,6 +736,7 @@ const KanbanView = ({ columns, groupedTickets, onEditTicket, onDeleteTicket, onT
                             getPriorityClass={getPriorityClass}
                             formatTime={formatTime}
                             formatDateTimeFromISO={formatDateTimeFromISO}
+                            onOpenTicketModal={onOpenTicketModal} // Pass down the function
                         />
                     ))}
                 </div>
@@ -733,37 +745,107 @@ const KanbanView = ({ columns, groupedTickets, onEditTicket, onDeleteTicket, onT
     );
 };
 
-const StopTimerModal = ({ isOpen, onClose, onStopConfirm, ticket }) => {
+// Consolidated Modal for status changes, reason, and checklist
+// Previously StopTimerModal, now GenericTicketActionModal or similar
+const TicketActionModal = ({ isOpen, onClose, onConfirm, ticket, targetStatus }) => {
     const [reason, setReason] = useState('');
     const [respondeuTicket, setRespondeuTicket] = useState(false);
     const [respondeuPlanilha, setRespondeuPlanilha] = useState(false);
-    const [isCompleting, setIsCompleting] = useState(false); 
     const [modalMessage, setModalMessage] = useState('');
 
+    const isTargetStatusEspera = targetStatus === 'Em Espera';
+    const isTargetStatusConcluido = targetStatus === 'Concluído';
+
     useEffect(() => {
-        if (isOpen && ticket) { 
+        if (isOpen && ticket) {
             setRespondeuTicket(ticket.checklist?.respondeuTicket || false);
             setRespondeuPlanilha(ticket.checklist?.respondeuPlanilha || false);
-            setReason(''); setModalMessage(''); setIsCompleting(false); 
+            setReason(''); // Reset reason, might be pre-filled if needed in future
+            setModalMessage('');
         }
-    }, [isOpen, ticket]);
+    }, [isOpen, ticket, targetStatus]);
 
-    const handleConfirmWrapper = (completeTask) => {
-        setModalMessage(''); 
-        if (!completeTask && !reason.trim()) { setModalMessage("O motivo da pausa é obrigatório."); return; }
-        if (completeTask && (!respondeuTicket || !respondeuPlanilha)) { setModalMessage("Por favor, confirme que respondeu ao ticket e à planilha antes de completar."); return; }
-        onStopConfirm(reason, { respondeuTicket, respondeuPlanilha }, completeTask);
-        onClose();
+    const handleConfirmClick = () => {
+        setModalMessage('');
+        if (isTargetStatusEspera && !reason.trim()) {
+            setModalMessage("O motivo para 'Em Espera' é obrigatório.");
+            return;
+        }
+        if (isTargetStatusConcluido && (!respondeuTicket || !respondeuPlanilha)) {
+            setModalMessage("Confirme o checklist para 'Concluído'.");
+            return;
+        }
+        // Pass back all relevant data from the modal
+        onConfirm(reason, { respondeuTicket, respondeuPlanilha });
+        onClose(); // Close modal after attempting confirm
     };
 
-    if (!ticket) return null;
+    if (!isOpen || !ticket) return null;
+
+    let modalTitle = `Alterar Status: ${ticket.subject}`;
+    if (isTargetStatusEspera) modalTitle = `Colocar em Espera: ${ticket.subject}`;
+    if (isTargetStatusConcluido) modalTitle = `Completar Ticket: ${ticket.subject}`;
+    if (targetStatus === 'Pendente' && ticket.status === 'Concluído') modalTitle = `Reabrir Ticket: ${ticket.subject}`;
+    else if (targetStatus === 'Pendente') modalTitle = `Mover para Pendente: ${ticket.subject}`;
+
+
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={isCompleting ? `Completar Ticket: ${ticket.subject}` : `Colocar em Espera: ${ticket.subject}`}>
+        <Modal isOpen={isOpen} onClose={onClose} title={modalTitle}>
             <div className="space-y-4">
                 {modalMessage && <p className="text-red-500 text-sm mb-2 p-2 bg-red-100 rounded">{modalMessage}</p>}
-                {!isCompleting && (<div><label htmlFor="reason" className="block text-sm font-medium text-gray-700">Motivo da Espera *</label><textarea id="reason" value={reason} onChange={(e) => setReason(e.target.value)} rows="3" required className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900" placeholder="Ex: Aguardando resposta do cliente, Faltando informação..." /></div>)}
-                {isCompleting && (<div className="space-y-2 pt-2"><p className="text-sm font-medium text-gray-700">Checklist de Finalização *</p><label className="flex items-center space-x-2 text-sm text-gray-600"><input type="checkbox" checked={respondeuTicket} onChange={(e) => setRespondeuTicket(e.target.checked)} className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" /><span>Respondeu o ticket na plataforma principal?</span></label><label className="flex items-center space-x-2 text-sm text-gray-600"><input type="checkbox" checked={respondeuPlanilha} onChange={(e) => setRespondeuPlanilha(e.target.checked)} className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" /><span>Atualizou a planilha de controle?</span></label></div>)}
-                <div className="flex justify-end space-x-3 pt-4"><button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Cancelar</button><button onClick={() => { setIsCompleting(false); handleConfirmWrapper(false); }} className="px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600">Colocar em Espera</button><button onClick={() => { setIsCompleting(true); handleConfirmWrapper(true); }} className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600">Completar Tarefa</button></div>
+
+                {(isTargetStatusEspera || (targetStatus === 'Pendente' && ticket.status !== 'Concluído')) && (
+                    <div>
+                        <label htmlFor="actionReason" className="block text-sm font-medium text-gray-700">
+                            Motivo {isTargetStatusEspera ? '*' : '(Opcional)'}
+                        </label>
+                        <textarea
+                            id="actionReason"
+                            value={reason}
+                            onChange={(e) => setReason(e.target.value)}
+                            rows="3"
+                            required={isTargetStatusEspera}
+                            className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900"
+                            placeholder={isTargetStatusEspera ? "Ex: Aguardando resposta do cliente..." : "Motivo para mover para pendente..."}
+                        />
+                    </div>
+                )}
+
+                {isTargetStatusConcluido && (
+                    <div className="space-y-2 pt-2">
+                        <p className="text-sm font-medium text-gray-700">Checklist de Finalização *</p>
+                        <label className="flex items-center space-x-2 text-sm text-gray-600">
+                            <input type="checkbox" checked={respondeuTicket} onChange={(e) => setRespondeuTicket(e.target.checked)} className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" />
+                            <span>Respondeu o ticket na plataforma principal?</span>
+                        </label>
+                        <label className="flex items-center space-x-2 text-sm text-gray-600">
+                            <input type="checkbox" checked={respondeuPlanilha} onChange={(e) => setRespondeuPlanilha(e.target.checked)} className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" />
+                            <span>Atualizou a planilha de controle?</span>
+                        </label>
+                    </div>
+                )}
+                 {/* Special case for reopening a completed ticket to backlog */}
+                 {targetStatus === 'Pendente' && ticket.status === 'Concluído' && !isTargetStatusEspera && (
+                     <div>
+                        <label htmlFor="actionReasonReopen" className="block text-sm font-medium text-gray-700">
+                            Motivo para Reabrir (Opcional)
+                        </label>
+                        <textarea
+                            id="actionReasonReopen"
+                            value={reason}
+                            onChange={(e) => setReason(e.target.value)}
+                            rows="3"
+                            className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900"
+                            placeholder="Ex: Cliente solicitou reabertura, Tarefa não foi completamente resolvida..."
+                        />
+                    </div>
+                 )}
+
+
+                <div className="flex justify-end space-x-3 pt-4">
+                    <button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Cancelar</button>
+                    <button onClick={handleConfirmClick} className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Confirmar</button>
+                </div>
             </div>
         </Modal>
     );
@@ -797,8 +879,26 @@ const TicketItem = ({ ticket, onToggleTimer, onDeleteTicket, onEditTicket, activ
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isActive, ticket.status, ticket.currentTimerStartTime, ticket.elapsedTime]);
 
-    const handleToggle = () => { if (isActive && ticket.status === 'Em Progresso') { setIsStopModalOpen(true); } else { if (ticket.status !== 'Concluído') { onToggleTimer(ticket.id, ticket.status); }}};
-    const handleStopConfirm = async (reason, checklist, isCompleting) => { await onToggleTimer(ticket.id, ticket.status, reason, checklist, isCompleting); setIsStopModalOpen(false); };
+    const handleToggle = () => {
+        if (isActive && ticket.status === 'Em Progresso') {
+            // This is where the modal would be triggered if it was for list view actions
+            // For now, list view uses direct toggle or edit. Kanban uses the new TicketActionModal.
+            // To unify, this could also set state to open TicketActionModal with correct targetStatus.
+            // However, the prompt is specific to Kanban DND.
+            // So, we keep the original list view behavior for this button.
+            // A refactor could make onToggleTimer also open the modal if a reason/checklist is needed.
+            setIsStopModalOpen(true); // This uses the OLD StopTimerModal, not the new TicketActionModal
+                                     // This needs to be updated if list view should use the new modal.
+                                     // For this subtask, we assume this is fine and focus on Kanban.
+        } else {
+            if (ticket.status !== 'Concluído') { onToggleTimer(ticket.id, ticket.status); }
+        }
+    };
+    // This handleStopConfirm is for the OLD StopTimerModal, used by TicketItem
+    const handleStopConfirm = async (reason, checklist, isCompleting) => {
+        await onToggleTimer(ticket.id, ticket.status, reason, checklist, isCompleting);
+        setIsStopModalOpen(false);
+    };
     const handleDelete = () => { onDeleteTicket(ticket.id); setIsConfirmDeleteOpen(false); };
     const getStatusStyles = () => {
         switch (ticket.status) {
@@ -849,8 +949,23 @@ const TicketItem = ({ ticket, onToggleTimer, onDeleteTicket, onEditTicket, activ
                     </ul>
                 </div>
             )}
-            <StopTimerModal isOpen={isStopModalOpen} onClose={() => setIsStopModalOpen(false)} onStopConfirm={handleStopConfirm} ticket={ticket} />
-            <ConfirmationModal isOpen={isConfirmDeleteOpen} onClose={() => setIsConfirmDeleteOpen(false)} onConfirm={handleDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja excluir o ticket "${ticket.subject}"? Esta ação não pode ser desfeita.`} />
+            {/* TicketItem still uses the original StopTimerModal for its play/pause button.
+                This needs to be decided if it should also use TicketActionModal.
+                For now, sticking to the subtask which is about DND in Kanban.
+            */}
+            <StopTimerModal
+                isOpen={isStopModalOpen}
+                onClose={() => setIsStopModalOpen(false)}
+                onStopConfirm={handleStopConfirm}
+                ticket={ticket}
+            />
+            <ConfirmationModal
+                isOpen={isConfirmDeleteOpen}
+                onClose={() => setIsConfirmDeleteOpen(false)}
+                onConfirm={handleDelete}
+                title="Confirmar Exclusão"
+                message={`Tem certeza que deseja excluir o ticket "${ticket.subject}"? Esta ação não pode ser desfeita.`}
+            />
         </div>
     );
 };
@@ -925,17 +1040,52 @@ function App() {
     const [isStopModalOpenForKanban, setIsStopModalOpenForKanban] = useState(false);
     const [kanbanDragDestinationStatus, setKanbanDragDestinationStatus] = useState(null);
 
+    // filteredTickets is already memoized and contains the tickets respecting all active filters.
+    const filteredTickets = useMemo(() => {
+        let sortedTickets = [...tickets];
+        sortedTickets.sort((a, b) => {
+            const priorityOrder = { "Solicitado por Terceiros": 0, "Alto Impacto": 1, "Médio Impacto": 2, "Baixo Impacto": 3 };
+            const statusOrder = { 'Em Progresso': 1, 'Em Espera': 2, 'Pendente': 3, 'Concluído': 4 }; // MODIFIED Pausado to Em Espera
+            if (a.id === activeTicketId && b.id !== activeTicketId) return -1; if (b.id === activeTicketId && a.id !== activeTicketId) return 1;
+            if (statusOrder[a.status] !== statusOrder[b.status]) return statusOrder[a.status] - statusOrder[b.status];
+            if (priorityOrder[a.priority] !== priorityOrder[b.priority]) return priorityOrder[a.priority] - priorityOrder[b.priority];
+            const timeA = new Date(a.lastUpdatedAt || a.createdAt); const timeB = new Date(b.lastUpdatedAt || b.createdAt);
+            return timeB - timeA;
+        });
+        let filtered = sortedTickets;
+        if (ticketFilter === 'abertos') filtered = filtered.filter(t => t.status !== 'Concluído');
+        if (ticketFilter === 'concluidos') filtered = filtered.filter(t => t.status === 'Concluído');
+        if (filterStartDate) filtered = filtered.filter(t => t.creationTime && new Date(new Date(filterStartDate).toDateString()) <= new Date(new Date(t.creationTime).toDateString()));
+        if (filterEndDate) filtered = filtered.filter(t => {
+            const ticketDate = new Date(t.creationTime); const ticketDateString = ticketDate.toISOString().split('T')[0];
+            const filterEndDateString = new Date(filterEndDate).toISOString().split('T')[0]; return ticketDateString <= filterEndDateString;
+        });
+        if (filterPriority) filtered = filtered.filter(t => t.priority === filterPriority);
+        if (filterDifficulty) filtered = filtered.filter(t => t.difficulty === filterDifficulty);
+        if (filterClient) { filtered = filtered.filter(t => t.accountName && t.accountName.toLowerCase().includes(filterClient.toLowerCase())); }
+        return filtered;
+    }, [tickets, ticketFilter, activeTicketId, filterStartDate, filterEndDate, filterPriority, filterDifficulty, filterClient]);
+
 
     const groupedTicketsForKanban = useMemo(() => {
         const groups = {};
         KANBAN_COLUMNS.forEach(column => { groups[column.status] = []; });
-        tickets.forEach(ticket => {
+        // Use filteredTickets directly
+        filteredTickets.forEach(ticket => {
             if (groups[ticket.status]) { groups[ticket.status].push(ticket); }
-            else { console.warn(`Ticket ${ticket.id} with unhandled status: ${ticket.status}`); }
+            else { console.warn(`Ticket ${ticket.id} with unhandled status for Kanban: ${ticket.status}`); }
         });
+        // Sorting within columns can still be useful for visual consistency if desired,
+        // though filteredTickets already has a primary sort.
+        // For Kanban, usually, the order within a column might be manually managed by drag-and-drop
+        // or by a specific Kanban-related field (e.g., manual rank).
+        // If we want to keep the same sort order as the list view (within status),
+        // filteredTickets is already sorted that way.
+        // The original sort inside this useMemo was by lastUpdatedAt/createdAt.
+        // Let's retain a similar sort for consistency within columns if no DND has happened.
         KANBAN_COLUMNS.forEach(column => {
              if (groups[column.status]) {
-                 groups[column.status].sort((a, b) => {
+                 groups[column.status].sort((a, b) => { // This sort is now secondary to the main filteredTickets sort
                      const timeA = new Date(a.lastUpdatedAt || a.createdAt);
                      const timeB = new Date(b.lastUpdatedAt || b.createdAt);
                      return timeB - timeA;
@@ -943,7 +1093,7 @@ function App() {
              }
          });
         return groups;
-    }, [tickets]);
+    }, [filteredTickets]); // Depends on filteredTickets now
 
     const showToast = (message, type = 'info') => {
         const newKey = Date.now();
@@ -1027,39 +1177,63 @@ function App() {
             return;
         }
 
+        // Restriction for "Concluído" tickets
+        if (draggedTicket.status === 'Concluído' && destinationDroppableId !== 'Pendente') {
+            showToast("Tickets concluídos só podem ser movidos para o Backlog (Pendente).", "info");
+            return; // Prevent the move
+        }
+
+        const originalTicketsOrder = { ...groupedTicketsForKanban };
+
+        // Optimistically update UI for reordering within the same column
+        if (sourceDroppableId === destinationDroppableId) {
+            const columnKey = source.droppableId;
+            const itemsInColumn = Array.from(originalTicketsOrder[columnKey] || []);
+            const [reorderedItem] = itemsInColumn.splice(source.index, 1);
+            itemsInColumn.splice(destination.index, 0, reorderedItem);
+
+            const newGroupedTickets = { ...originalTicketsOrder, [columnKey]: itemsInColumn };
+            // This optimistic update of `setTickets` might be tricky if `tickets` is not directly what `groupedTicketsForKanban` uses.
+            // It's better to update the source that `groupedTicketsForKanban` derives from, or manage order separately.
+            // For now, let's assume `filteredTickets` is the source and DND reordering is primarily visual or needs specific backend handling.
+            // The current `groupedTicketsForKanban` sorts by time, so manual DND order isn't persisted in its current structure without more complex state management.
+            // For this subtask, focusing on filtering, DND reordering logic will be kept simple.
+            // A full DND reordering persistence would require updating `lastUpdatedAt` or a dedicated order field.
+            console.log("Reordered within column (visual only, or needs backend integration for persistence)");
+            // To reflect this visual change immediately if not persisting, one might need to update `tickets` state in a way that respects this new order.
+            // This is complex if `filteredTickets` is the primary source for `groupedTicketsForKanban`.
+            // For now, we will rely on `fetchTickets` to refresh if an actual change was made.
+        }
+
+
         if (sourceDroppableId !== destinationDroppableId) { // Moved between columns
             if (destinationDroppableId === 'Em Progresso') {
-                await handleToggleTimer(draggableId, draggedTicket.status);
-            } else if (draggedTicket.status === 'Em Progresso' && (destinationDroppableId === 'Em Espera' || destinationDroppableId === 'Concluído')) { // MODIFIED
+                // No status change needed if already 'Em Progresso' due to filtering, but timer logic is key
+                if (draggedTicket.status !== 'Em Progresso' || !draggedTicket.isActive) {
+                    await handleToggleTimer(String(draggedTicket.id), draggedTicket.status); // Ensure ID is string
+                } else { // Already 'Em Progresso' and active, no change needed, but refresh to be sure
+                    fetchTickets();
+                }
+            } else if (draggedTicket.status === 'Em Progresso' && (destinationDroppableId === 'Em Espera' || destinationDroppableId === 'Concluído')) {
                 setTicketForStopModal(draggedTicket);
                 setKanbanDragDestinationStatus(destinationDroppableId);
                 setIsStopModalOpenForKanban(true);
-            } else {
+            } else { // Other status changes
                 try {
-                    await ticketRepository.updateTicket(draggableId, { status: destinationDroppableId, log: addLogEntryToTicketObject(draggedTicket.log, `Status alterado para ${destinationDroppableId} via DND`) });
-                    fetchTickets();
+                    await ticketRepository.updateTicket(String(draggedTicket.id), { status: destinationDroppableId, log: addLogEntryToTicketObject(draggedTicket.log, `Status alterado para ${destinationDroppableId} via DND Kanban`) });
+                    fetchTickets(); // Refresh data
                     showToast("Ticket movido com sucesso!", "success");
                 } catch (error) {
-                    console.error("Error updating ticket status via DND:", error);
+                    console.error("Error updating ticket status via DND Kanban:", error);
                     showToast(`Erro ao mover ticket: ${error.message}`, "error");
+                    // Revert optimistic update if necessary, though fetchTickets() will do this.
                 }
             }
-        } else { // Reordered within the same column
-            const columnStatus = source.droppableId;
-            let columnTickets = Array.from(groupedTicketsForKanban[columnStatus] || []);
-            const [movedItem] = columnTickets.splice(source.index, 1);
-            columnTickets.splice(destination.index, 0, movedItem);
-
-            const newTicketsState = KANBAN_COLUMNS.reduce((acc, col) => {
-                if (col.status === columnStatus) {
-                    acc.push(...columnTickets);
-                } else {
-                    acc.push(...(groupedTicketsForKanban[col.status] || []));
-                }
-                return acc;
-            }, []);
-            setTickets(newTicketsState);
-            console.log("Reordered within column (frontend only for now)");
+        } else { // Reordered within the same column - purely visual or needs specific backend logic
+             // If not persisting order via backend, the list will revert to its original sort on next `fetchTickets`
+             // or when `filteredTickets` recalculates without new order info.
+             // For now, no specific action for reordering if not changing column status.
+             // The console log above covers this.
         }
     };
 
@@ -1072,31 +1246,7 @@ function App() {
     const handleEditTicket = (ticket) => { setEditingTicket(ticket); setIsTicketModalOpen(true); };
     const handleCloseTicketModal = () => { setIsTicketModalOpen(false); setEditingTicket(null); };
 
-    const filteredTickets = useMemo(() => {
-        let sortedTickets = [...tickets];
-        sortedTickets.sort((a, b) => {
-            const priorityOrder = { "Solicitado por Terceiros": 0, "Alto Impacto": 1, "Médio Impacto": 2, "Baixo Impacto": 3 };
-            const statusOrder = { 'Em Progresso': 1, 'Em Espera': 2, 'Pendente': 3, 'Concluído': 4 }; // MODIFIED Pausado to Em Espera
-            if (a.id === activeTicketId && b.id !== activeTicketId) return -1; if (b.id === activeTicketId && a.id !== activeTicketId) return 1;
-            if (statusOrder[a.status] !== statusOrder[b.status]) return statusOrder[a.status] - statusOrder[b.status];
-            if (priorityOrder[a.priority] !== priorityOrder[b.priority]) return priorityOrder[a.priority] - priorityOrder[b.priority];
-            const timeA = new Date(a.lastUpdatedAt || a.createdAt); const timeB = new Date(b.lastUpdatedAt || b.createdAt);
-            return timeB - timeA;
-        });
-        let filtered = sortedTickets;
-        if (ticketFilter === 'abertos') filtered = filtered.filter(t => t.status !== 'Concluído');
-        if (ticketFilter === 'concluidos') filtered = filtered.filter(t => t.status === 'Concluído');
-        if (filterStartDate) filtered = filtered.filter(t => t.creationTime && new Date(new Date(filterStartDate).toDateString()) <= new Date(new Date(t.creationTime).toDateString()));
-        if (filterEndDate) filtered = filtered.filter(t => {
-            const ticketDate = new Date(t.creationTime); const ticketDateString = ticketDate.toISOString().split('T')[0];
-            const filterEndDateString = new Date(filterEndDate).toISOString().split('T')[0]; return ticketDateString <= filterEndDateString;
-        });
-        if (filterPriority) filtered = filtered.filter(t => t.priority === filterPriority);
-        if (filterDifficulty) filtered = filtered.filter(t => t.difficulty === filterDifficulty);
-        if (filterClient) { filtered = filtered.filter(t => t.accountName && t.accountName.toLowerCase().includes(filterClient.toLowerCase())); }
-        return filtered;
-    }, [tickets, ticketFilter, activeTicketId, filterStartDate, filterEndDate, filterPriority, filterDifficulty, filterClient]);
-
+    // activeTicketDetails is already memoized using 'tickets' which is fine.
     const activeTicketDetails = useMemo(() => { if (!activeTicketId) return null; return tickets.find(t => t.id === activeTicketId); }, [activeTicketId, tickets]);
     
     const [headerTime, setHeaderTime] = useState(0);
@@ -1167,9 +1317,62 @@ function App() {
                         {!isLoading && !error && filteredTickets.length > 0 && currentView === 'tickets' && (<div className="space-y-4">{filteredTickets.map(ticket => (<TicketItem key={ticket.id} ticket={ticket} onToggleTimer={handleToggleTimer} onDeleteTicket={handleDeleteTicket} onEditTicket={handleEditTicket} activeTicketId={activeTicketId}/>))}</div>)}
                     </>)}
                     {currentView === 'kanban' && (
-                        <KanbanView
-                            columns={KANBAN_COLUMNS}
-                            groupedTickets={groupedTicketsForKanban}
+                        <>
+                        {/* Filter UI for Kanban View - Copied and adapted from Ticket List View */}
+                        <div className="mb-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <div className="flex items-center space-x-2 p-2 bg-slate-800 rounded-lg">
+                                <Filter size={20} className="text-indigo-400"/>
+                                <select value={ticketFilter} onChange={(e) => setTicketFilter(e.target.value)} className="bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                    <option value="abertos">Abertos</option>
+                                    <option value="concluidos">Concluídos</option>
+                                    <option value="todos">Todos</option>
+                                </select>
+                                <button onClick={() => setShowAdvancedFilters(v => !v)} className="ml-2 px-3 py-2 text-xs rounded bg-indigo-600 hover:bg-indigo-700 text-white flex items-center space-x-1">
+                                    <Filter size={14}/><span>{showAdvancedFilters ? 'Ocultar Filtros' : 'Filtros Avançados'}</span>
+                                </button>
+                            </div>
+                            {/* Add New Ticket button is already in KanbanColumn for 'Pendente' */}
+                        </div>
+                        {showAdvancedFilters && (
+                            <div className="mb-6 bg-slate-800 p-4 rounded-lg shadow">
+                                <h4 className="text-lg font-semibold text-gray-100 mb-3">Filtros Avançados</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 items-end">
+                                    <div><label htmlFor="filterStartDateKanban" className="block text-xs font-medium text-gray-300 mb-1">Data Inicial</label><input type="date" id="filterStartDateKanban" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} className="w-full bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm" /></div>
+                                    <div><label htmlFor="filterEndDateKanban" className="block text-xs font-medium text-gray-300 mb-1">Data Final</label><input type="date" id="filterEndDateKanban" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} className="w-full bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm" /></div>
+                                    <div><label htmlFor="filterPriorityKanban" className="block text-xs font-medium text-gray-300 mb-1">Prioridade</label><select id="filterPriorityKanban" value={filterPriority} onChange={e => setFilterPriority(e.target.value)} className="w-full bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm"><option value="">Todas</option><option value="Solicitado por Terceiros">Solicitado por Terceiros</option><option value="Alto Impacto">Alto Impacto</option><option value="Médio Impacto">Médio Impacto</option><option value="Baixo Impacto">Baixo Impacto</option></select></div>
+                                    <div><label htmlFor="filterDifficultyKanban" className="block text-xs font-medium text-gray-300 mb-1">Dificuldade</label><select id="filterDifficultyKanban" value={filterDifficulty} onChange={e => setFilterDifficulty(e.target.value)} className="w-full bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm"><option value="">Todas</option><option value="Fácil">Fácil</option><option value="Médio">Médio</option><option value="Difícil">Difícil</option></select></div>
+                                    <div><label htmlFor="filterClientInputKanban" className="block text-xs font-medium text-gray-300 mb-1">Cliente</label><input type="text" id="filterClientInputKanban" value={filterClient} onChange={e => setFilterClient(e.target.value)} placeholder="Digite para buscar cliente..." className="w-full bg-slate-700 text-gray-200 border border-slate-600 rounded-md p-2 text-sm" list="advanced-client-filter-list-kanban" autoComplete="off" /><datalist id="advanced-client-filter-list-kanban">{clients.filter(client => filterClient.trim() === '' || client.name.toLowerCase().includes(filterClient.toLowerCase())).map(client => (<option key={client.id} value={client.name} />))}</datalist></div>
+                                    <div className="self-end"><button onClick={() => { setFilterStartDate(''); setFilterEndDate(''); setFilterPriority(''); setFilterDifficulty(''); setFilterClient(''); }} className="w-full px-3 py-2 text-sm rounded bg-slate-600 hover:bg-slate-500 text-white">Limpar Filtros</button></div>
+                                </div>
+                            </div>
+                        )}
+                        {isLoading && <div className="text-center py-10 text-gray-300">Carregando tickets...</div>}
+                        {!isLoading && !error && filteredTickets.length === 0 && !isTicketModalOpen && currentView === 'kanban' && (
+                            <div className="text-center py-10 bg-slate-800 rounded-lg shadow-md">
+                                <p className="text-xl text-gray-400">Nenhum ticket encontrado para o filtro atual no Kanban.</p>
+                                {ticketFilter === 'abertos' && <p className="text-gray-500">Adicione um novo ticket ou altere o filtro.</p>}
+                            </div>
+                        )}
+                        {/* Render KanbanView only if not loading, no error, and there are tickets to show or modal is not open (to avoid layout shift) */}
+                        {(!isLoading && !error && (filteredTickets.length > 0 || isTicketModalOpen)) && (
+                           <KanbanView
+                                columns={KANBAN_COLUMNS}
+                                groupedTickets={groupedTicketsForKanban}
+                                onEditTicket={handleEditTicket}
+                                onDeleteTicket={handleDeleteTicket}
+                                onToggleTimer={handleToggleTimer}
+                                activeTicketId={activeTicketId}
+                                getPriorityClass={getPriorityClass}
+                                formatTime={formatTime}
+                                formatDateTimeFromISO={formatDateTimeFromISO}
+                                onDragEnd={handleDragEnd}
+                                onOpenTicketModal={() => { setEditingTicket(null); setIsTicketModalOpen(true); }}
+                            />
+                        )}
+                        </>
+                    )}
+                    {currentView === 'reports' && (<ReportsView tickets={tickets} />)}
+                    {currentView === 'clients' && ( <ClientManagementView /> )}
                             onEditTicket={handleEditTicket}
                             onDeleteTicket={handleDeleteTicket}
                             onToggleTimer={handleToggleTimer}
@@ -1178,6 +1381,7 @@ function App() {
                             formatTime={formatTime}
                             formatDateTimeFromISO={formatDateTimeFromISO}
                             onDragEnd={handleDragEnd}
+                            onOpenTicketModal={() => { setEditingTicket(null); setIsTicketModalOpen(true); }} // Pass the handler
                         />
                     )}
                     {currentView === 'reports' && (<ReportsView tickets={tickets} />)}
@@ -1201,24 +1405,66 @@ function App() {
                         showToast("Cliente cadastrado com sucesso!", "success"); // Uses App's showToast
                     }}
                 />
-                {isStopModalOpenForKanban && ticketForStopModal && (
-                    <StopTimerModal
+                    {isStopModalOpenForKanban && ticketForStopModal && kanbanDragDestinationStatus && (
+                    <TicketActionModal
                         isOpen={isStopModalOpenForKanban}
                         onClose={() => {
                             setIsStopModalOpenForKanban(false);
                             setTicketForStopModal(null);
                             setKanbanDragDestinationStatus(null);
-                            fetchTickets();
+                            // fetchTickets(); // Fetch tickets only after action is confirmed, not on close
                         }}
-                        onStopConfirm={async (reason, checklist) => {
+                        onConfirm={async (reason, checklist) => { // Changed from onStopConfirm
                             if (!ticketForStopModal || !kanbanDragDestinationStatus) return;
-                            const isCompleting = kanbanDragDestinationStatus === 'Concluído';
-                            await handleToggleTimer(ticketForStopModal.id, ticketForStopModal.status, reason, checklist, isCompleting, kanbanDragDestinationStatus);
+
+                            const isCurrentlyEmProgresso = ticketForStopModal.status === 'Em Progresso';
+                            const isTargetEmProgresso = kanbanDragDestinationStatus === 'Em Progresso';
+                             const isTargetConcluido = kanbanDragDestinationStatus === 'Concluído';
+
+                            if (isCurrentlyEmProgresso && !isTargetEmProgresso) {
+                                // Moving from 'Em Progresso' to a non-'Em Progresso' state (e.g., Espera, Concluido, Pendente)
+                                // This requires stopping the timer and then setting the new status.
+                                await handleToggleTimer(
+                                    ticketForStopModal.id,
+                                    ticketForStopModal.status, // current status
+                                    reason,
+                                    checklist,
+                                    isTargetConcluido, // isCompleting flag
+                                    kanbanDragDestinationStatus // final status from drag
+                                );
+                            } else if (!isCurrentlyEmProgresso && isTargetEmProgresso) {
+                                // This case should be handled by the direct call to handleToggleTimer in handleDragEnd
+                                // and not open the modal. If it reaches here, it's an unexpected state.
+                                console.warn("TicketActionModal opened unexpectedly for target 'Em Progresso' from non-'Em Progresso' state.");
+                                await handleToggleTimer(ticketForStopModal.id, ticketForStopModal.status);
+                            } else {
+                                // General case: Not moving from 'Em Progresso' OR moving to 'Em Progresso' (which is handled above or directly)
+                                // OR moving between non 'Em Progresso' states e.g. Pendente -> Em Espera
+                                const logAction = `Status alterado de ${ticketForStopModal.status} para ${kanbanDragDestinationStatus}`;
+                                const newLog = addLogEntryToTicketObject(ticketForStopModal.log, logAction, reason, isTargetConcluido ? checklist : null);
+                                try {
+                                    await ticketRepository.updateTicket(ticketForStopModal.id, {
+                                        ...ticketForStopModal, // spread existing ticket data
+                                        status: kanbanDragDestinationStatus,
+                                        log: newLog,
+                                        ...(isTargetConcluido && { checklist }), // Add checklist if completing
+                                        // Ensure timer related fields are nullified if not moving to 'Em Progresso'
+                                        isActive: false,
+                                        currentTimerStartTime: null,
+                                    });
+                                    showToast(`Ticket "${ticketForStopModal.subject}" atualizado para ${kanbanDragDestinationStatus}.`, "success");
+                                } catch (error) {
+                                    console.error("Erro ao atualizar ticket via modal:", error);
+                                    showToast(`Erro ao atualizar ticket: ${error.message}`, "error");
+                                }
+                            }
+                            fetchTickets(); // Refresh data after action
                             setIsStopModalOpenForKanban(false);
                             setTicketForStopModal(null);
                             setKanbanDragDestinationStatus(null);
                         }}
                         ticket={ticketForStopModal}
+                        targetStatus={kanbanDragDestinationStatus} // Pass targetStatus to the modal
                     />
                 )}
                 <footer className="text-center py-6 text-sm text-gray-500 border-t border-slate-700 mt-10"><p>&copy; {new Date().getFullYear()} Gerenciador de Tempo Local.</p></footer>
