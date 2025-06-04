@@ -715,10 +715,13 @@ const KanbanColumn = ({ column, ticketsInColumn, onEditTicket, onDeleteTicket, o
     );
 };
 
-const KanbanView = ({ columns, groupedTickets, onEditTicket, onDeleteTicket, onToggleTimer, activeTicketId, getPriorityClass, formatTime, formatDateTimeFromISO, onDragEnd, onOpenTicketModal }) => {
-    if (!columns || !groupedTickets) {
+const KanbanView = ({ columns, groupedTickets, onEditTicket, onDeleteTicket, onToggleTimer, activeTicketId, getPriorityClass, formatTime, formatDateTimeFromISO, onDragEnd, onOpenTicketModal, isLoading }) => {
+    // columns should always be KANBAN_COLUMNS, so it will exist.
+    // groupedTickets might be empty if no tickets match filters or no tickets exist.
+    if (isLoading) { // Keep a loading state if tickets are still being fetched initially.
         return <div className="text-center p-10 text-gray-400 text-lg">Carregando quadro Kanban...</div>;
     }
+    // Render columns even if all are empty. KanbanColumn handles "Nenhum ticket aqui."
     return (
         <DragDropContext onDragEnd={onDragEnd}>
             <div className="p-4 sm:p-5 bg-slate-800/80 rounded-xl shadow-2xl min-h-[calc(100vh-180px)]">
@@ -746,21 +749,22 @@ const KanbanView = ({ columns, groupedTickets, onEditTicket, onDeleteTicket, onT
 };
 
 // Consolidated Modal for status changes, reason, and checklist
-// Previously StopTimerModal, now GenericTicketActionModal or similar
 const TicketActionModal = ({ isOpen, onClose, onConfirm, ticket, targetStatus }) => {
     const [reason, setReason] = useState('');
-    const [respondeuTicket, setRespondeuTicket] = useState(false);
-    const [respondeuPlanilha, setRespondeuPlanilha] = useState(false);
+    const [respondeuTicket, setRespondeuTicket] = useState(null); // Initialize to null
+    const [respondeuPlanilha, setRespondeuPlanilha] = useState(null); // Initialize to null
     const [modalMessage, setModalMessage] = useState('');
 
     const isTargetStatusEspera = targetStatus === 'Em Espera';
     const isTargetStatusConcluido = targetStatus === 'Concluído';
+    const showChecklist = targetStatus === 'Concluído' || targetStatus === 'Em Espera' || targetStatus === 'Pendente';
 
     useEffect(() => {
         if (isOpen && ticket) {
-            setRespondeuTicket(ticket.checklist?.respondeuTicket || false);
-            setRespondeuPlanilha(ticket.checklist?.respondeuPlanilha || false);
-            setReason(''); // Reset reason, might be pre-filled if needed in future
+            // Pre-fill from ticket if available, otherwise null
+            setRespondeuTicket(ticket.checklist?.respondeuTicket !== undefined ? ticket.checklist.respondeuTicket : null);
+            setRespondeuPlanilha(ticket.checklist?.respondeuPlanilha !== undefined ? ticket.checklist.respondeuPlanilha : null);
+            setReason('');
             setModalMessage('');
         }
     }, [isOpen, ticket, targetStatus]);
@@ -771,13 +775,19 @@ const TicketActionModal = ({ isOpen, onClose, onConfirm, ticket, targetStatus })
             setModalMessage("O motivo para 'Em Espera' é obrigatório.");
             return;
         }
-        if (isTargetStatusConcluido && (!respondeuTicket || !respondeuPlanilha)) {
-            setModalMessage("Confirme o checklist para 'Concluído'.");
-            return;
+        if (showChecklist) {
+            if (respondeuTicket === null || respondeuPlanilha === null) {
+                setModalMessage("Por favor, responda a todas as perguntas do checklist.");
+                return;
+            }
+            if (isTargetStatusConcluido && (!respondeuTicket || !respondeuPlanilha)) {
+                setModalMessage("Para concluir, confirme que respondeu ao ticket e à planilha (ambos devem ser 'Sim').");
+                return;
+            }
         }
-        // Pass back all relevant data from the modal
-        onConfirm(reason, { respondeuTicket, respondeuPlanilha });
-        onClose(); // Close modal after attempting confirm
+        const checklistData = showChecklist ? { respondeuTicket, respondeuPlanilha } : ticket?.checklist || { respondeuTicket: false, respondeuPlanilha: false };
+        onConfirm(reason, checklistData);
+        onClose();
     };
 
     if (!isOpen || !ticket) return null;
@@ -788,12 +798,12 @@ const TicketActionModal = ({ isOpen, onClose, onConfirm, ticket, targetStatus })
     if (targetStatus === 'Pendente' && ticket.status === 'Concluído') modalTitle = `Reabrir Ticket: ${ticket.subject}`;
     else if (targetStatus === 'Pendente') modalTitle = `Mover para Pendente: ${ticket.subject}`;
 
-
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={modalTitle}>
             <div className="space-y-4">
                 {modalMessage && <p className="text-red-500 text-sm mb-2 p-2 bg-red-100 rounded">{modalMessage}</p>}
 
+                {/* Reason Field: Mandatory for Espera, optional for Pendente (if not reopening a Concluido) */}
                 {(isTargetStatusEspera || (targetStatus === 'Pendente' && ticket.status !== 'Concluído')) && (
                     <div>
                         <label htmlFor="actionReason" className="block text-sm font-medium text-gray-700">
@@ -810,22 +820,8 @@ const TicketActionModal = ({ isOpen, onClose, onConfirm, ticket, targetStatus })
                         />
                     </div>
                 )}
-
-                {isTargetStatusConcluido && (
-                    <div className="space-y-2 pt-2">
-                        <p className="text-sm font-medium text-gray-700">Checklist de Finalização *</p>
-                        <label className="flex items-center space-x-2 text-sm text-gray-600">
-                            <input type="checkbox" checked={respondeuTicket} onChange={(e) => setRespondeuTicket(e.target.checked)} className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" />
-                            <span>Respondeu o ticket na plataforma principal?</span>
-                        </label>
-                        <label className="flex items-center space-x-2 text-sm text-gray-600">
-                            <input type="checkbox" checked={respondeuPlanilha} onChange={(e) => setRespondeuPlanilha(e.target.checked)} className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" />
-                            <span>Atualizou a planilha de controle?</span>
-                        </label>
-                    </div>
-                )}
-                 {/* Special case for reopening a completed ticket to backlog */}
-                 {targetStatus === 'Pendente' && ticket.status === 'Concluído' && !isTargetStatusEspera && (
+                 {/* Reason field for reopening a completed ticket to Pendente */}
+                 {targetStatus === 'Pendente' && ticket.status === 'Concluído' && (
                      <div>
                         <label htmlFor="actionReasonReopen" className="block text-sm font-medium text-gray-700">
                             Motivo para Reabrir (Opcional)
@@ -836,11 +832,32 @@ const TicketActionModal = ({ isOpen, onClose, onConfirm, ticket, targetStatus })
                             onChange={(e) => setReason(e.target.value)}
                             rows="3"
                             className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900"
-                            placeholder="Ex: Cliente solicitou reabertura, Tarefa não foi completamente resolvida..."
+                            placeholder="Ex: Cliente solicitou reabertura..."
                         />
                     </div>
                  )}
 
+                {showChecklist && (
+                    <div className="space-y-3 pt-2">
+                        <p className="text-sm font-medium text-gray-700 mb-1">
+                            Checklist {isTargetStatusConcluido ? '(ambos "Sim" para Concluir)' : '(selecione uma opção para cada)'}
+                        </p>
+                        <div>
+                            <label className="block text-sm text-gray-600 mb-1">Respondeu o ticket na plataforma principal?</label>
+                            <div className="flex space-x-2">
+                                <button type="button" onClick={() => setRespondeuTicket(true)} className={`px-3 py-1.5 text-sm rounded-md border ${respondeuTicket === true ? 'bg-green-500 text-white border-green-600' : 'bg-gray-100 hover:bg-gray-200 border-gray-300'}`}>Sim</button>
+                                <button type="button" onClick={() => setRespondeuTicket(false)} className={`px-3 py-1.5 text-sm rounded-md border ${respondeuTicket === false ? 'bg-red-500 text-white border-red-600' : 'bg-gray-100 hover:bg-gray-200 border-gray-300'}`}>Não</button>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm text-gray-600 mb-1">Atualizou a planilha de controle?</label>
+                            <div className="flex space-x-2">
+                                <button type="button" onClick={() => setRespondeuPlanilha(true)} className={`px-3 py-1.5 text-sm rounded-md border ${respondeuPlanilha === true ? 'bg-green-500 text-white border-green-600' : 'bg-gray-100 hover:bg-gray-200 border-gray-300'}`}>Sim</button>
+                                <button type="button" onClick={() => setRespondeuPlanilha(false)} className={`px-3 py-1.5 text-sm rounded-md border ${respondeuPlanilha === false ? 'bg-red-500 text-white border-red-600' : 'bg-gray-100 hover:bg-gray-200 border-gray-300'}`}>Não</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <div className="flex justify-end space-x-3 pt-4">
                     <button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Cancelar</button>
@@ -1351,10 +1368,23 @@ function App() {
                             </div>
                         )}
                         {isLoading && <div className="text-center py-10 text-gray-300">Carregando tickets...</div>}
-                        {!isLoading && !error && filteredTickets.length === 0 && !isTicketModalOpen && currentView === 'tickets' && (<div className="text-center py-10 bg-slate-800 rounded-lg shadow-md"><p className="text-xl text-gray-400">Nenhum ticket encontrado para o filtro atual.</p>{ticketFilter === 'abertos' && <p className="text-gray-500">Adicione um novo ticket para começar ou altere o filtro.</p>}</div>)}
-                        {!isLoading && !error && filteredTickets.length > 0 && currentView === 'tickets' && (<div className="space-y-4">{filteredTickets.map(ticket => (<TicketItem key={ticket.id} ticket={ticket} onToggleTimer={handleToggleTimer} onDeleteTicket={handleDeleteTicket} onEditTicket={handleEditTicket} activeTicketId={activeTicketId}/>))}</div>)}
+                        {/* List View ticket rendering area */}
+                        <div className="space-y-4">
+                            {isLoading && <div className="text-center py-10 text-gray-300">Carregando tickets...</div>}
+                            {!isLoading && !error && filteredTickets.length === 0 && !isTicketModalOpen && (
+                                <div className="text-center py-10 bg-slate-800 rounded-lg shadow-md">
+                                    <p className="text-xl text-gray-400">Nenhum ticket encontrado para o filtro atual.</p>
+                                    {ticketFilter === 'abertos' && <p className="text-gray-500 mt-2">Adicione um novo ticket para começar ou altere o filtro.</p>}
+                                </div>
+                            )}
+                            {!isLoading && !error && filteredTickets.length > 0 &&
+                                filteredTickets.map(ticket => (
+                                    <TicketItem key={ticket.id} ticket={ticket} onToggleTimer={handleToggleTimer} onDeleteTicket={handleDeleteTicket} onEditTicket={handleEditTicket} activeTicketId={activeTicketId}/>
+                                ))
+                            }
+                        </div>
                     </>)}
-                    {currentView === 'kanban' && (
+                    {currentView === 'kanban' && !isLoading && !error && (
                         <>
                         {/* Filter UI for Kanban View - Copied and adapted from Ticket List View */}
                         <div className="mb-6 flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -1384,18 +1414,13 @@ function App() {
                                 </div>
                             </div>
                         )}
-                        {isLoading && <div className="text-center py-10 text-gray-300">Carregando tickets...</div>}
-                        {!isLoading && !error && filteredTickets.length === 0 && !isTicketModalOpen && currentView === 'kanban' && (
-                            <div className="text-center py-10 bg-slate-800 rounded-lg shadow-md">
-                                <p className="text-xl text-gray-400">Nenhum ticket encontrado para o filtro atual no Kanban.</p>
-                                {ticketFilter === 'abertos' && <p className="text-gray-500">Adicione um novo ticket ou altere o filtro.</p>}
-                            </div>
-                        )}
-                        {/* Render KanbanView only if not loading, no error, and there are tickets to show or modal is not open (to avoid layout shift) */}
-                        {(!isLoading && !error && (filteredTickets.length > 0 || isTicketModalOpen)) && (
-                           <KanbanView
+                        {/* KanbanView is now rendered regardless of filteredTickets.length, but after loading/error checks */}
+                        {/* It receives isLoading to show its own loading message if needed, or App can handle global loading. */}
+                        {/* For this change, App handles global loading, KanbanView just renders columns. */}
+                        <KanbanView
                                 columns={KANBAN_COLUMNS}
                                 groupedTickets={groupedTicketsForKanban}
+                                isLoading={isLoading} // Pass isLoading
                                 onEditTicket={handleEditTicket}
                                 onDeleteTicket={handleDeleteTicket}
                                 onToggleTimer={handleToggleTimer}
