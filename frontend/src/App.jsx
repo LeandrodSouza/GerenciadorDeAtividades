@@ -989,7 +989,7 @@ const TicketItem = ({ ticket, onToggleTimer, onDeleteTicket, onEditTicket, activ
 };
 
 // Definition for OriginalStopTimerModal (logic from the old StopTimerModal)
-const OriginalStopTimerModal = ({ isOpen, onClose, onStopConfirm, ticket }) => {
+const OriginalStopTimerModal = ({ isOpen, onClose, onStopConfirm, ticket }) => { // Added showToast as a prop, though not used in this specific modal. This is a leftover from a copy-paste? No, OriginalStopTimerModal does not need showToast.
     const [reason, setReason] = useState('');
     const [respondeuTicket, setRespondeuTicket] = useState(false);
     const [respondeuPlanilha, setRespondeuPlanilha] = useState(false);
@@ -1025,7 +1025,7 @@ const OriginalStopTimerModal = ({ isOpen, onClose, onStopConfirm, ticket }) => {
     );
 };
 
-const ReportsView = ({ tickets }) => {
+const ReportsView = ({ tickets, showToast }) => { // Added showToast to props
     const [reportType, setReportType] = useState('daily');
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [reportData, setReportData] = useState(null);
@@ -1483,7 +1483,7 @@ function App() {
                         </>
                     )}
                     {/* The stray code was here. It has been removed. */}
-                    {currentView === 'reports' && (<ReportsView tickets={tickets} />)}
+                    {currentView === 'reports' && (<ReportsView tickets={tickets} showToast={showToast} />)}
                     {currentView === 'clients' && ( <ClientManagementView /> )}
                 </main>
                 <TicketModal isOpen={isTicketModalOpen} onClose={handleCloseTicketModal} ticketToEdit={editingTicket} onTicketAddedOrUpdated={handleTicketAddedOrUpdated} clients={clients} showToast={showToast} onOpenClientModal={() => setIsClientModalOpen(true)} />
