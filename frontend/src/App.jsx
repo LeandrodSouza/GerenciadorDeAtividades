@@ -698,7 +698,7 @@ const KanbanColumn = ({ column, ticketsInColumn, onEditTicket, onDeleteTicket, o
                                 getPriorityClass={getPriorityClass}
                                 formatTime={formatTime}
                                 formatDateTimeFromISO={formatDateTimeFromISO}
-                                StopTimerModalComponent={StopTimerModal}
+                                StopTimerModalComponent={TicketActionModal} // Corrected: KanbanCard uses TicketActionModal via prop
                                 ConfirmationModalComponent={ConfirmationModal}
                             />
                         ))}
@@ -953,7 +953,8 @@ const TicketItem = ({ ticket, onToggleTimer, onDeleteTicket, onEditTicket, activ
                 This needs to be decided if it should also use TicketActionModal.
                 For now, sticking to the subtask which is about DND in Kanban.
             */}
-            <StopTimerModal
+            {/* Corrected: TicketItem should use OriginalStopTimerModal */}
+            <OriginalStopTimerModal
                 isOpen={isStopModalOpen}
                 onClose={() => setIsStopModalOpen(false)}
                 onStopConfirm={handleStopConfirm}
@@ -967,6 +968,43 @@ const TicketItem = ({ ticket, onToggleTimer, onDeleteTicket, onEditTicket, activ
                 message={`Tem certeza que deseja excluir o ticket "${ticket.subject}"? Esta ação não pode ser desfeita.`}
             />
         </div>
+    );
+};
+
+// Definition for OriginalStopTimerModal (logic from the old StopTimerModal)
+const OriginalStopTimerModal = ({ isOpen, onClose, onStopConfirm, ticket }) => {
+    const [reason, setReason] = useState('');
+    const [respondeuTicket, setRespondeuTicket] = useState(false);
+    const [respondeuPlanilha, setRespondeuPlanilha] = useState(false);
+    const [isCompleting, setIsCompleting] = useState(false);
+    const [modalMessage, setModalMessage] = useState('');
+
+    useEffect(() => {
+        if (isOpen && ticket) {
+            setRespondeuTicket(ticket.checklist?.respondeuTicket || false);
+            setRespondeuPlanilha(ticket.checklist?.respondeuPlanilha || false);
+            setReason(''); setModalMessage(''); setIsCompleting(false);
+        }
+    }, [isOpen, ticket]);
+
+    const handleConfirmWrapper = (completeTask) => {
+        setModalMessage('');
+        if (!completeTask && !reason.trim()) { setModalMessage("O motivo da pausa é obrigatório."); return; }
+        if (completeTask && (!respondeuTicket || !respondeuPlanilha)) { setModalMessage("Por favor, confirme que respondeu ao ticket e à planilha antes de completar."); return; }
+        onStopConfirm(reason, { respondeuTicket, respondeuPlanilha }, completeTask);
+        onClose();
+    };
+
+    if (!isOpen || !ticket) return null;
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title={isCompleting ? `Completar Ticket: ${ticket.subject}` : `Colocar em Espera: ${ticket.subject}`}>
+            <div className="space-y-4">
+                {modalMessage && <p className="text-red-500 text-sm mb-2 p-2 bg-red-100 rounded">{modalMessage}</p>}
+                {!isCompleting && (<div><label htmlFor="originalReason" className="block text-sm font-medium text-gray-700">Motivo da Espera *</label><textarea id="originalReason" value={reason} onChange={(e) => setReason(e.target.value)} rows="3" required className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-gray-900" placeholder="Ex: Aguardando resposta do cliente, Faltando informação..." /></div>)}
+                {isCompleting && (<div className="space-y-2 pt-2"><p className="text-sm font-medium text-gray-700">Checklist de Finalização *</p><label className="flex items-center space-x-2 text-sm text-gray-600"><input type="checkbox" checked={respondeuTicket} onChange={(e) => setRespondeuTicket(e.target.checked)} className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" /><span>Respondeu o ticket na plataforma principal?</span></label><label className="flex items-center space-x-2 text-sm text-gray-600"><input type="checkbox" checked={respondeuPlanilha} onChange={(e) => setRespondeuPlanilha(e.target.checked)} className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" /><span>Atualizou a planilha de controle?</span></label></div>)}
+                <div className="flex justify-end space-x-3 pt-4"><button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Cancelar</button><button onClick={() => { setIsCompleting(false); handleConfirmWrapper(false); }} className="px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600">Colocar em Espera</button><button onClick={() => { setIsCompleting(true); handleConfirmWrapper(true); }} className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600">Completar Tarefa</button></div>
+            </div>
+        </Modal>
     );
 };
 
