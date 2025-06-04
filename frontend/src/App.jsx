@@ -1479,7 +1479,7 @@ function App() {
                                 onDragEnd={handleDragEnd}
                                 onOpenTicketModal={() => { setEditingTicket(null); setIsTicketModalOpen(true); }}
                             />
-                        )}
+                       
                         </>
                     )}
                     {/* The stray code was here. It has been removed. */}
